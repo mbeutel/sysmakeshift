@@ -56,18 +56,23 @@ void translateStructuredExceptionToStdException(unsigned u, EXCEPTION_POINTERS*)
 {
     throw StructuredException(u);
 }
-#elif defined(__GNUC__)
+#elif defined(__GNUC__) && !defined(__clang__)
 class FPException : public std::exception
 {
 };
 
+extern "C"
+{
+
 [[gnu::no_caller_saved_registers]]
-extern "C" void fpSignalHandler([[maybe_unused]] int sig)
+void fpSignalHandler([[maybe_unused]] int sig)
 {
     asm(".cfi_signal_frame");
     throw FPException();
 }
-#endif // defined(_MSC_VER) or defined(__GNUC__)
+
+} // extern "C"
+#endif // defined(_MSC_VER) or (defined(__GNUC__) && !defined(__clang__))
 
 
 void divBy0(void)
@@ -125,13 +130,13 @@ TEST_CASE("set_trapping_fe_exceptions")
         CHECK(sysmakeshift::get_trapping_fe_exceptions() == excCode);
         CHECK_THROWS_AS(excFunc(), StructuredException);
         sysmakeshift::set_trapping_fe_exceptions(0);
-#elif defined(__GNUC__)
+#elif defined(__GNUC__) && !defined(__clang__)
         std::signal(SIGFPE, fpSignalHandler);
         sysmakeshift::set_trapping_fe_exceptions(excCode);
         CHECK(sysmakeshift::get_trapping_fe_exceptions() == excCode);
         CHECK_THROWS_AS(excFunc(), FPException);
         sysmakeshift::set_trapping_fe_exceptions(0);
-#endif // defined(_MSC_VER) or defined(__GNUC__)
+#endif // defined(_MSC_VER) or (defined(__GNUC__) && !defined(__clang__))
     }
     std::feclearexcept(FE_ALL_EXCEPT);
 }
