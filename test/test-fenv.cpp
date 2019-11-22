@@ -96,9 +96,9 @@ TEST_CASE("set_trapping_fe_exceptions")
 #endif // _MSC_VER
 
     auto [excFunc, excCode] = GENERATE(
-        std::tuple{ divBy0, FE_DIVBYZERO },
-        std::tuple{ inexact, FE_INEXACT },
-        std::tuple{ invalid, FE_INVALID }
+        std::tuple{ &divBy0, FE_DIVBYZERO },
+        std::tuple{ &inexact, FE_INEXACT },
+        std::tuple{ &invalid, FE_INVALID }
     );
 
     SECTION("Can detect floating-point exceptions")

@@ -4,7 +4,7 @@ variables:
   system.debug: true
   vcpkgGitRef: f07efb4a1dfebf4f9d55308785e65c74b68de269
   vcpkgPortsOverlayRepo: 'https://mp-force.ziti.uni-heidelberg.de/asc/infrastructure/vcpkg-ports.git'
-  vcpkgPortsOverlayRef: 98300d22cc7880d646203f46e99bffcac098f0a1
+  vcpkgPortsOverlayRef: 7f5820dd97e8e0e9f8fe430686db3084bf23aa2d
   cmakeConfigArgs: '-DBUILD_TESTS=ON'
   revision: 4
 
