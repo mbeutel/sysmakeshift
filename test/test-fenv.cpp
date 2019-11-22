@@ -64,7 +64,7 @@ class FPException : public std::exception
 extern "C"
 {
 
-[[gnu::no_caller_saved_registers]]
+//[[gnu::no_caller_saved_registers]]
 void fpSignalHandler([[maybe_unused]] int sig)
 {
     asm(".cfi_signal_frame");
