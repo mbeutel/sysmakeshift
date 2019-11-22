@@ -4,19 +4,19 @@
 #include <tuple>
 #include <exception>
 
-#if defined(_WIN32)
+#if defined(_MSC_VER)
 # include <Windows.h>
 # include <eh.h>      // for _set_se_translator()
 #elif defined(__GNUC__)
 # include <csignal>
-#endif // defined(_WIN32) or defined(__GNUC__)
+#endif // defined(_MSC_VER) or defined(__GNUC__)
 
 #include <sysmakeshift/fenv.hpp>
 
 #include <catch2/catch.hpp>
 
 
-#if defined(_WIN32)
+#if defined(_MSC_VER)
 class StructuredException : public std::exception
 {
 private:
@@ -67,7 +67,7 @@ extern "C" void fpSignalHandler([[maybe_unused]] int sig)
     asm(".cfi_signal_frame");
     throw FPException();
 }
-#endif // defined(_WIN32) or defined(__GNUC__)
+#endif // defined(_MSC_VER) or defined(__GNUC__)
 
 
 void divBy0(void)
@@ -91,9 +91,9 @@ void invalid(void)
 
 TEST_CASE("set_trapping_fe_exceptions")
 {
-#ifdef _WIN32
+#ifdef _MSC_VER
     auto scopedExcTranslator = ScopedStructuredExceptionTranslator(translateStructuredExceptionToStdException);
-#endif // _WIN32
+#endif // _MSC_VER
 
     auto [excFunc, excCode] = GENERATE(
         std::tuple{ divBy0, FE_DIVBYZERO },
@@ -120,7 +120,7 @@ TEST_CASE("set_trapping_fe_exceptions")
 
     SECTION("Raises exception if flag is set")
     {
-#if defined(_WIN32)
+#if defined(_MSC_VER)
         sysmakeshift::set_trapping_fe_exceptions(excCode);
         CHECK(sysmakeshift::get_trapping_fe_exceptions() == excCode);
         CHECK_THROWS_AS(excFunc(), StructuredException);
@@ -131,7 +131,7 @@ TEST_CASE("set_trapping_fe_exceptions")
         CHECK(sysmakeshift::get_trapping_fe_exceptions() == excCode);
         CHECK_THROWS_AS(excFunc(), FPException);
         sysmakeshift::set_trapping_fe_exceptions(0);
-#endif // defined(_WIN32) or defined(__GNUC__)
+#endif // defined(_MSC_VER) or defined(__GNUC__)
     }
     std::feclearexcept(FE_ALL_EXCEPT);
 }
