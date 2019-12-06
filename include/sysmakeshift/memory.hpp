@@ -28,25 +28,25 @@ namespace sysmakeshift
     // cf. https://stackoverflow.com/a/21028912
     //
 template <typename T, typename A = std::allocator<T>>
-    class default_init_allocator : public A
+class default_init_allocator : public A
 {
 public:
     using A::A;
 
     template <typename U>
-        struct rebind
+    struct rebind
     {
         using other = default_init_allocator<U, typename std::allocator_traits<A>::template rebind_alloc<U>>;
     };
 
     template <typename U>
-        void construct(U* ptr)
-        noexcept(std::is_nothrow_default_constructible<U>::value)
+    void construct(U* ptr)
+    noexcept(std::is_nothrow_default_constructible<U>::value)
     {
         ::new(static_cast<void*>(ptr)) U;
     }
     template <typename U, typename...ArgsT>
-        void construct(U* ptr, ArgsT&&... args)
+    void construct(U* ptr, ArgsT&&... args)
     {
         std::allocator_traits<A>::construct(static_cast<A&>(*this), ptr, std::forward<ArgsT>(args)...);
     }
@@ -57,7 +57,7 @@ public:
     // Allocator that always returns zero-initialized memory.
     //
 template <typename T>
-    class zero_init_allocator
+class zero_init_allocator
 {
 public:
     using value_type = T;
@@ -66,7 +66,7 @@ public:
     {
     }
     template <typename U>
-        constexpr zero_init_allocator(zero_init_allocator<U> const&) noexcept
+    constexpr zero_init_allocator(zero_init_allocator<U> const&) noexcept
     {
     }
 
@@ -84,12 +84,12 @@ public:
 };
 
 template <typename T, typename U>
-    gsl_NODISCARD bool operator ==(zero_init_allocator<T> const&, zero_init_allocator<U> const&) noexcept
+gsl_NODISCARD bool operator ==(zero_init_allocator<T> const&, zero_init_allocator<U> const&) noexcept
 {
     return true;
 }
 template <typename T, typename U>
-    gsl_NODISCARD bool operator !=(zero_init_allocator<T> const& x, zero_init_allocator<U> const& y) noexcept
+gsl_NODISCARD bool operator !=(zero_init_allocator<T> const& x, zero_init_allocator<U> const& y) noexcept
 {
     return !(x == y);
 }
@@ -120,7 +120,7 @@ public:
     using A::A;
 
     template <typename U>
-        struct rebind
+    struct rebind
     {
         using other = aligned_allocator<U, Alignment, typename std::allocator_traits<A>::template rebind_alloc<U>>;
     };
@@ -171,7 +171,7 @@ public:
     using value_type = T;
 
     template <typename U>
-        struct rebind
+    struct rebind
     {
         using other = aligned_default_allocator<U, Alignment>;
     };
@@ -180,7 +180,7 @@ public:
     {
     }
     template <typename U>
-        constexpr aligned_default_allocator(aligned_default_allocator<U, Alignment> const&) noexcept
+    constexpr aligned_default_allocator(aligned_default_allocator<U, Alignment> const&) noexcept
     {
     }
 
@@ -199,13 +199,13 @@ public:
     }
 };
 
-template <typename T, typename U, alignment Alignment1, alignment Alignment2>
-    gsl_NODISCARD bool operator ==(aligned_default_allocator<T, Alignment1> const&, aligned_default_allocator<U, Alignment2> const&) noexcept
+template <typename T, typename U, alignment Alignment>
+gsl_NODISCARD bool operator ==(aligned_default_allocator<T, Alignment>, aligned_default_allocator<U, Alignment>) noexcept
 {
-    return Alignment1 == Alignment2;
+    return true;
 }
-template <typename T, typename U, alignment Alignment1, alignment Alignment2>
-    gsl_NODISCARD bool operator !=(aligned_default_allocator<T, Alignment1> const& x, aligned_default_allocator<U, Alignment2> const& y) noexcept
+template <typename T, typename U, alignment Alignment>
+gsl_NODISCARD bool operator !=(aligned_default_allocator<T, Alignment> x, aligned_default_allocator<U, Alignment> y) noexcept
 {
     return !(x == y);
 }
@@ -219,7 +219,7 @@ template <typename T, typename U, alignment Alignment1, alignment Alignment2>
     //ᅟ    auto p3 = allocate_unique<float[42]>(MyAllocator<float>{ }); // returns `std::unique_ptr<float[42], allocator_deleter<float[42], MyAllocator<float>>>`
     //
 template <typename T, typename A>
-    class allocator_deleter : private A // for EBO
+class allocator_deleter : private A // for EBO
 {
 public:
     allocator_deleter(const A& _alloc)
@@ -233,7 +233,7 @@ public:
     }
 };
 template <typename T, typename A>
-    class allocator_deleter<T[], A> : private A // for EBO
+class allocator_deleter<T[], A> : private A // for EBO
 {
 private:
     std::size_t size_;
@@ -253,7 +253,7 @@ public:
     }
 };
 template <typename T, std::ptrdiff_t N, typename A>
-    class allocator_deleter<T[N], A> : private A // for EBO
+class allocator_deleter<T[N], A> : private A // for EBO
 {
 public:
     allocator_deleter(const A& _alloc)
@@ -278,8 +278,8 @@ public:
     //ᅟ    // returns `std::unique_ptr<float, allocator_deleter<float, MyAllocator<float>>>`
     //
 template <typename T, typename A, typename... ArgsT>
-    std::enable_if_t<!detail::can_instantiate_v<detail::remove_extent_only_t, T>, std::unique_ptr<T, allocator_deleter<T, A>>>
-    allocate_unique(A alloc, ArgsT&&... args)
+std::enable_if_t<!detail::can_instantiate_v<detail::remove_extent_only_t, T>, std::unique_ptr<T, allocator_deleter<T, A>>>
+allocate_unique(A alloc, ArgsT&&... args)
 {
     using NCVT = std::remove_cv_t<T>;
     static_assert(std::is_same<typename std::allocator_traits<A>::value_type, NCVT>::value, "allocator has mismatching value_type");
@@ -295,8 +295,8 @@ template <typename T, typename A, typename... ArgsT>
     //ᅟ    // returns `std::unique_ptr<float[42], allocator_deleter<float[42], MyAllocator<float>>>`
     //
 template <typename ArrayT, typename A>
-    std::enable_if_t<detail::extent_only<ArrayT>::value != 0, std::unique_ptr<ArrayT, allocator_deleter<ArrayT, A>>>
-    allocate_unique(A alloc)
+std::enable_if_t<detail::extent_only<ArrayT>::value != 0, std::unique_ptr<ArrayT, allocator_deleter<ArrayT, A>>>
+allocate_unique(A alloc)
 {
     using T = std::remove_cv_t<detail::remove_extent_only_t<ArrayT>>;
     static_assert(std::is_same<typename std::allocator_traits<A>::value_type, T>::value, "allocator has mismatching value_type");
@@ -312,8 +312,8 @@ template <typename ArrayT, typename A>
     //ᅟ    // returns `std::unique_ptr<float[], allocator_deleter<float[], MyAllocator<float>>>`
     //
 template <typename ArrayT, typename A>
-    std::enable_if_t<detail::extent_only<ArrayT>::value == 0, std::unique_ptr<ArrayT, allocator_deleter<ArrayT, A>>>
-    allocate_unique(A alloc, std::size_t size)
+std::enable_if_t<detail::extent_only<ArrayT>::value == 0, std::unique_ptr<ArrayT, allocator_deleter<ArrayT, A>>>
+allocate_unique(A alloc, std::size_t size)
 {
     using T = std::remove_cv_t<detail::remove_extent_only_t<ArrayT>>;
     static_assert(std::is_same<typename std::allocator_traits<A>::value_type, T>::value, "allocator has mismatching value_type");

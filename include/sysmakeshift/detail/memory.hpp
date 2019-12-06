@@ -32,21 +32,21 @@ template <typename T> constexpr std::ptrdiff_t extent_only_v = extent_only<T>::v
 
 
 template <typename T, typename A, typename... ArgsT>
-    T* allocate(std::true_type /*isNothrowConstructible*/, A& alloc, ArgsT&&... args)
+T* allocate(std::true_type /*isNothrowConstructible*/, A& alloc, ArgsT&&... args)
 {
     T* ptr = std::allocator_traits<A>::allocate(alloc, 1);
     std::allocator_traits<A>::construct(alloc, ptr, std::forward<ArgsT>(args)...);
     return ptr;
 }
 template <typename T, typename A, typename... ArgsT>
-    T* allocate(std::false_type /*isNothrowConstructible*/, A& alloc, ArgsT&&... args)
+T* allocate(std::false_type /*isNothrowConstructible*/, A& alloc, ArgsT&&... args)
 {
     T* ptr = std::allocator_traits<A>::allocate(alloc, 1);
     try
     {
         std::allocator_traits<A>::construct(alloc, ptr, std::forward<ArgsT>(args)...);
     }
-    catch (...)
+    catch (...) // TODO: use gsl-lite's `on_error()` instead
     {
         std::allocator_traits<A>::deallocate(alloc, ptr, 1);
         throw;
@@ -55,7 +55,7 @@ template <typename T, typename A, typename... ArgsT>
 }
 
 template <typename T, typename A, typename SizeC>
-    T* allocate_array(std::true_type /*isNothrowDefaultConstructible*/, A& alloc, SizeC sizeC)
+T* allocate_array(std::true_type /*isNothrowDefaultConstructible*/, A& alloc, SizeC sizeC)
 {
     T* ptr = std::allocator_traits<A>::allocate(alloc, std::size_t(sizeC));
     for (std::ptrdiff_t i = 0; i != std::ptrdiff_t(sizeC); ++i)
@@ -65,7 +65,7 @@ template <typename T, typename A, typename SizeC>
     return ptr;
 }
 template <typename T, typename A, typename SizeC>
-    T* allocate_array(std::false_type /*isNothrowDefaultConstructible*/, A& alloc, SizeC sizeC)
+T* allocate_array(std::false_type /*isNothrowDefaultConstructible*/, A& alloc, SizeC sizeC)
 {
     T* ptr = std::allocator_traits<A>::allocate(alloc, std::size_t(sizeC));
     std::ptrdiff_t i = 0;
@@ -76,7 +76,7 @@ template <typename T, typename A, typename SizeC>
             std::allocator_traits<A>::construct(alloc, &ptr[i]);
         }
     }
-    catch (...)
+    catch (...) // TODO: use gsl-lite's `on_error()` instead
     {
             // Revert by destroying all already-constructed items, deallocating, and then re-throwing the exception.
         for (--i; i >= 0; --i)
@@ -100,7 +100,7 @@ void aligned_free(void* data, std::size_t size, std::size_t alignment) noexcept;
 std::size_t alignment_in_bytes(alignment a) noexcept;
 
 template <typename T>
-    constexpr bool is_alignment_power_of_2(T value) noexcept
+constexpr bool is_alignment_power_of_2(T value) noexcept
 {
     return value > 0
         && (value & (value - 1)) == 0;

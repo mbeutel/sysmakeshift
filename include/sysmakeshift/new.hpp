@@ -10,10 +10,10 @@ namespace sysmakeshift
 {
 
 
-    // It is controversial whether `std::hardware_{constructive|destructive}_interference_size` should really be a constexpr value, cf. the discussion at
+    // It is controversial whether C++17 `std::hardware_{constructive|destructive}_interference_size` should really be a constexpr value, cf. the discussion at
     // https://lists.llvm.org/pipermail/cfe-dev/2018-May/058073.html and the proposal paper P0154R1 at http://www.open-std.org/jtc1/sc22/wg21/docs/papers/2016/p0154r1.html.
 
-    // My current take is that the constexpr constants below should be reasonable but not necessarily accurate values to minimize the impact of false sharing.
+    // My current take is that the constexpr constants should be reasonable but not necessarily accurate values to minimize the impact of false sharing.
     // An accurate value can be determined at runtime by calling `hardware_cache_line_size()`.
 
     // Defining these constexpr values in sysmakeshift is less controversial than defining them in the standard library because sysmakeshift is not burdened
@@ -42,6 +42,10 @@ std::size_t hardware_page_size(void) noexcept;
     // Reports the CPU architecture's cache line size in bytes.
     //
 std::size_t hardware_cache_line_size(void) noexcept;
+
+
+// TODO: implement evict_from_cache() (here??)
+// TODO: implement touch_pages() (here??)
 
 
 } // namespace sysmakeshift
