@@ -20,10 +20,10 @@ if(BUILD_TESTS)
     add_subdirectory(test)
 endif()
 
-## Install.
+# Install.
 find_package(CMakeshift 3.7 REQUIRED)
 include(CMakeshift/InstallBasicPackageFiles)
 cmakeshift_install_basic_package_files(sysmakeshift
     COMPATIBILITY SameMajorVersion
     DEPENDENCIES
-        "gsl-lite 0.35.2")
+        "gsl-lite 0.35.3")
