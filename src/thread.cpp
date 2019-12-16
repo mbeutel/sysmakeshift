@@ -19,7 +19,8 @@
 # define NOMINMAX 
 # include <Windows.h> // GetLastError(), SetThreadAffinityMask()
 # include <process.h> // _beginthreadex()
-#elif defined(__linux__)
+#elif defined(__linux__) || defined(__APPLE__)
+# define USE_PTHREAD
 # include <cerrno>
 # include <pthread.h> // pthread_self(), pthread_setaffinity_np()
 #else
@@ -176,35 +177,35 @@ public:
     }
 };
 
-#else // TODO: support MacOS
-# error Unsupported operating system
 #endif // _WIN32
 
 #ifdef _WIN32 // currently not needed on non-Windows platforms, so avoid defining it to suppress "unused function" warning
 static void setThreadAffinity(std::thread::native_handle_type handle, std::size_t coreIdx)
 {
-# ifdef _WIN32
+# if defined(_WIN32)
     if (coreIdx >= sizeof(DWORD_PTR) * 8) // bits per byte
     {
         throw std::range_error("cannot currently handle more than 8*sizeof(void*) CPUs on Windows");
     }
     win32Assert(SetThreadAffinityMask((HANDLE) handle, DWORD_PTR(1) << coreIdx) != 0);
-# else // _WIN32
+# elif defined(__linux__)
     cpu_set cpuSet;
     cpuSet.setCpuFlag(coreIdx);
     posixCheck(::pthread_setaffinity_np((pthread_t) handle, cpuSet.size(), cpuSet.data()));
-# endif // _WIN32
+# else
+#  error Unsupported operating system.
+# endif
 }
 #endif // _WIN32
 
-#ifndef _WIN32
+#ifdef __linux__
 static void setThreadAttrAffinity(pthread_attr_t& attr, std::size_t coreIdx)
 {
     cpu_set cpuSet;
     cpuSet.setCpuFlag(coreIdx);
     posixCheck(::pthread_attr_setaffinity_np(&attr, cpuSet.size(), cpuSet.data()));
 }
-#endif // _WIN32
+#endif // __linux__
 
 
 #if defined(_WIN32)
@@ -216,7 +217,7 @@ struct win32_handle_deleter
     }
 };
 using win32_handle = std::unique_ptr<std::remove_pointer_t<HANDLE>, win32_handle_deleter>;
-#elif defined(__linux__)
+#elif defined(USE_PTHREAD)
 class pthread_handle
 {
 private:
@@ -284,6 +285,11 @@ static std::atomic<unsigned> threadPoolCounter{ };
 #endif // _WIN32
 
 
+    // TODO: this barrier can be made more efficient:
+    //  - by using a better algorithm, e.g. a dissemination barrier
+    //  - by using mostly syscall-free waits (e.g. atomics and exponential backoff), especially if all threads run on a
+    //    dedicated hardware thread
+    //  - by issuing PAUSE instructions, especially if multiple threads share a physical thread
 class barrier
 {
 private:
@@ -358,10 +364,12 @@ struct thread_pool_thread
 
     void operator ()(void);
 
-#ifdef _WIN32
+#if defined(_WIN32)
     static unsigned __stdcall threadFunc(void* data);
-#else // ^^^ _WIN32 ^^^ / vvv !_WIN32 vvv
+#elif defined(USE_PTHREAD)
     static void* threadFunc(void* data);
+#else
+# error Unsupported operating system.
 #endif // _WIN32
 };
 
@@ -370,7 +378,7 @@ struct thread_pool_impl : thread_pool_impl_base
 private:
 #if defined(_WIN32)
     std::unique_ptr<detail::win32_handle[]> handles_;
-#elif defined(__linux__)
+#elif defined(USE_PTHREAD)
     std::unique_ptr<detail::pthread_handle[]> handles_;
 #else
 # error Unsupported operating system.
@@ -383,12 +391,14 @@ private:
     unsigned threadPoolId_; // for runtime thread identification during debugging
 #endif // _WIN32
     bool running_;
-#ifndef _WIN32
+#ifdef USE_PTHREAD
     bool needLaunch_;
+#endif // USE_PTHREAD
+#ifdef __linux__
     bool pinToHardwareThreads_;
     int maxNumHardwareThreads_;
     std::vector<int> hardwareThreadMappings_;
-#endif // !_WIN32
+#endif // __linux__
 
     static std::size_t getHardwareThreadId(int threadIdx, int maxNumHardwareThreads, gsl::span<int const> hardwareThreadMappings)
     {
@@ -402,7 +412,7 @@ private:
     {
         auto self = std::unique_ptr<thread_pool_impl>(this);
         
-#ifdef _WIN32
+#if defined(_WIN32)
             // Join threads.
         for (int i = 0; i < numThreads_; )
         {
@@ -417,14 +427,16 @@ private:
             detail::win32Assert(result != WAIT_FAILED);
             i += n;
         }
-#else // ^^^ _WIN32 ^^^ / vvv !_WIN32 vvv
+#elif defined(USE_PTHREAD)
             // Join threads. It is possible that this can be improved with a tree-like wait chain.
         for (int i = 0; i < numThreads_; ++i)
         {
             detail::posixCheck(::pthread_join(handles_[i].get(), NULL));
             handles_[i].release();
         }
-#endif // _WIN32
+#else
+# error Unsupported operating system.
+#endif
     }
 
     void schedule_termination(std::future<void>* completion) noexcept // We cannot really handle `bad_alloc` here.
@@ -452,7 +464,7 @@ public:
             data_[i].threadIdx_ = i;
         }
 
-#ifdef _WIN32
+#if defined(_WIN32)
             // Create threads suspended; set core affinity if desired.
         handles_ = std::make_unique<detail::win32_handle[]>(gsl::narrow_cast<std::size_t>(p.num_threads));
         DWORD threadCreationFlags = p.pin_to_hardware_threads ? CREATE_SUSPENDED : 0;
@@ -467,14 +479,16 @@ public:
             }
             handles_[i] = std::move(handle);
         }
-#else // ^^^ _WIN32 ^^^ / vvv !_WIN32 vvv
+#elif defined(__linux__)
             // Store hardware thread mappings for delayed thread creation.
-        handles_ = std::make_unique<detail::pthread_handle[]>(gsl::narrow_cast<std::size_t>(p.num_threads));
-        needLaunch_ = false;
         pinToHardwareThreads_ = p.pin_to_hardware_threads;
         maxNumHardwareThreads_ = p.max_num_hardware_threads;
         hardwareThreadMappings_.assign(p.hardware_thread_mappings.begin(), p.hardware_thread_mappings.end());
-#endif // _WIN32
+#endif
+#ifdef USE_PTHREAD
+        handles_ = std::make_unique<detail::pthread_handle[]>(gsl::narrow_cast<std::size_t>(p.num_threads));
+        needLaunch_ = false;
+#endif // USE_PTHREAD
     }
 
     bool wait_at_barrier(void)
@@ -492,22 +506,24 @@ public:
         if (running_) return;
         running_ = true;
 
-#ifdef _WIN32
+#if defined(_WIN32)
             // Resume threads.
         for (int i = 0; i < numThreads_; ++i)
         {
             DWORD result = ::ResumeThread(handles_[i].get());
             detail::win32Assert(result != DWORD(-1));
         }
-#else // ^^^ _WIN32 ^^^ / vvv !_WIN32 vvv
+#elif defined(USE_PTHREAD)
             // Create threads; set core affinity if desired.
         for (int i = 0; i < numThreads_; ++i)
         {
             PThreadAttr attr;
+# if defined(__linux__)
             if (pinToHardwareThreads_)
             {
                 detail::setThreadAttrAffinity(attr.attr, getHardwareThreadId(i, maxNumHardwareThreads_, hardwareThreadMappings_));
             }
+# endif
             auto handle = pthread_t{ };
             detail::posixCheck(::pthread_create(&handle, &attr.attr, &thread_pool_thread::threadFunc, &data_[i]));
             handles_[i] = pthread_handle(handle);
@@ -515,10 +531,12 @@ public:
 
             // Release thread mapping data.
         hardwareThreadMappings_ = { };
-#endif // _WIN32
+#else
+# error Unsupported operating system.
+#endif
     }
 
-    void schedule_job(std::future<void>* completion, std::function<void(thread_pool::task_context)> action, int concurrency, bool last) noexcept // We cannot really failure in future chaining.
+    void schedule_job(std::future<void>* completion, std::function<void(thread_pool::task_context)> action, int concurrency, bool last) noexcept // We cannot really handle failure in future chaining.
     {
         auto completionPromise = std::optional<std::promise<void>>{ };
         if (completion != nullptr)
@@ -529,21 +547,21 @@ public:
         auto nextJobPromise = std::promise<std::optional<thread_pool_job>>{ };
         nextJob_.set_value(thread_pool_job{ std::move(action), std::move(completionPromise), concurrency, last, nextJobPromise.get_future().share() });
         nextJob_ = std::move(nextJobPromise);
-#ifndef _WIN32
+#ifdef USE_PTHREAD
         needLaunch_ = true;
-#endif // !_WIN32
+#endif // USE_PTHREAD
     }
 
     void close_and_free(std::future<void>* completion)
     {
-#ifdef _WIN32
+#if defined(_WIN32)
         schedule_termination(completion);
         launch_threads(); // The only clean way to quit never-resumed threads on Windows is to resume them and let them run to the end.
         if (completion == nullptr)
         {
             join_threads_and_free();
         }
-#else // ^^^ _WIN32 ^^^ / vvv !_WIN32 vvv
+#elif defined(USE_PTHREAD)
         if (needLaunch_ || running_)
         {
             schedule_termination(completion);
@@ -566,7 +584,9 @@ public:
                 *completion = completionPromise.get_future();
             }
         }
-#endif // _WIN32
+#else
+# error Unsupported operating system.
+#endif
     }
 };
 
@@ -614,7 +634,7 @@ void thread_pool_thread::operator ()(void)
     }
 }
 
-#ifdef _WIN32
+#if defined(_WIN32)
 unsigned __stdcall thread_pool_thread::threadFunc(void* data)
 {
     thread_pool_thread& self = *static_cast<thread_pool_thread*>(data);
@@ -627,14 +647,16 @@ unsigned __stdcall thread_pool_thread::threadFunc(void* data)
     self();
     return 0;
 }
-#else // ^^^ _WIN32 ^^^ / vvv !_WIN32 vvv
+#elif defined(USE_PTHREAD)
 void* thread_pool_thread::threadFunc(void* data)
 {
     thread_pool_thread& self = *static_cast<thread_pool_thread*>(data);
     self();
     return nullptr;
 }
-#endif // _WIN32
+#else
+# error Unsupported operating system.
+#endif
 
 
 void thread_pool_impl_deleter::operator ()(thread_pool_impl_base* impl)
@@ -661,6 +683,16 @@ detail::thread_pool_handle thread_pool::create(thread_pool::params p)
           : hardwareConcurrency;
     }
     p.max_num_hardware_threads = std::max(p.max_num_hardware_threads, hardwareConcurrency);
+
+        // Check system support for thread pinning.
+#if !defined(_WIN32) && !defined(__linux__)
+    if (p.pin_to_hardware_threads)
+    {
+            // Thread pinning not currently supported on this OS.
+        throw std::system_error(std::make_error_code(std::errc::not_supported),
+            "pinning to hardware threads is not implemented on this operating system");
+    }
+#endif // !defined(_WIN32) && !defined(__linux__)
 
     return detail::thread_pool_handle(new detail::thread_pool_impl(p));
 }
