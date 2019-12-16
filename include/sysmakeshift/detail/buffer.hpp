@@ -71,7 +71,7 @@ constexpr arithmetic_result<std::common_type_t<X, D>> ceili(X x, D d)
 
 
 template <typename T, typename A>
-struct aligned_buffer_deleter : A // EBO
+struct aligned_buffer_deleter : private A // EBO
 {
     std::size_t size_; // # elements
     std::size_t bytesPerElement_;
@@ -97,53 +97,64 @@ struct aligned_buffer_deleter : A // EBO
         destroy(data);
         std::allocator_traits<ByteAllocator>::deallocate(*this, data, allocSize_);
     }
+    A const& get_allocator(void) const noexcept { return *this; }
 };
 
-template <typename T, typename A>
+template <typename T, typename A, typename... Ts>
 std::unique_ptr<char[], aligned_buffer_deleter<T, A>>
 init_aligned_buffer(std::unique_ptr<char[], aligned_buffer_deleter<T, A>> data, std::size_t _size, std::size_t _bytesPerElement,
-    std::true_type /*isNothrowConstructible*/)
+    std::true_type /*isNothrowConstructible*/,
+    Ts const&... args)
 {
     data.get_deleter().size_ = _size;
     for (std::ptrdiff_t i = 0, d = std::ptrdiff_t(_bytesPerElement), e = std::ptrdiff_t(_size * _bytesPerElement); i != e; i += d)
     {
-        std::allocator_traits<A>::construct(*this, reinterpret_cast<T*>(&data[i]));
+        std::allocator_traits<A>::construct(*this, reinterpret_cast<T*>(&data[i]), args...);
     }
     return data;
 }
-template <typename T, typename A>
+template <typename T, typename A, typename... Ts>
 std::unique_ptr<char[], aligned_buffer_deleter<T, A>>
 init_aligned_buffer(std::unique_ptr<char[], aligned_buffer_deleter<T, A>> data, std::size_t _size, std::size_t _bytesPerElement,
-    std::false_type /*isNothrowConstructible*/)
+    std::false_type /*isNothrowConstructible*/,
+    Ts const&... args)
 {
     for (std::ptrdiff_t i = 0, d = std::ptrdiff_t(_bytesPerElement), e = std::ptrdiff_t(_size * _bytesPerElement); i != e; i += d)
     {
-        std::allocator_traits<A>::construct(*this, reinterpret_cast<T*>(&data[i]));
+        std::allocator_traits<A>::construct(*this, reinterpret_cast<T*>(&data[i]), args...);
         ++data.get_deleter().size_;
     }
     return data;
 }
 
-template <typename T, alignment Alignment, typename A>
+template <typename T, typename A>
 std::unique_ptr<char[], aligned_buffer_deleter<T, A>>
-acquire_aligned_buffer(std::size_t _size, A _allocator)
+acquire_aligned_buffer(void)
+{
+    return std::unique_ptr<char[], aligned_buffer_deleter<T, A>>(
+        nullptr,
+        aligned_buffer_deleter<T, A>({ }, 0, 0));
+}
+template <typename T, alignment Alignment, typename A, typename... Ts>
+std::unique_ptr<char[], aligned_buffer_deleter<T, A>>
+acquire_aligned_buffer(std::size_t _size, A _allocator, Ts const&... args)
 {
     using ByteAllocator = typename std::allocator_traits<A>::template rebind_alloc<char>;
 
     auto bytesPerElementR = detail::ceili(sizeof(T), detail::alignment_in_bytes(Alignment));
     auto numBytesR = detail::multiply_unsigned(_size, bytesPerElementR.value);
     if (bytesPerElementR.ec != std::errc{ } || numBytesR.ec != std::errc{ }) throw std::bad_alloc{ };
-    auto d = aligned_buffer_deleter(std::move(_allocator), bytesPerElementR.value, numBytesR.value);
+    auto d = aligned_buffer_deleter<T, A>(std::move(_allocator), bytesPerElementR.value, numBytesR.value);
 
     char* rawData = std::allocator_traits<ByteAllocator>::allocate(d, numBytesR.value);
-    auto data = std::unique_ptr<char[], aligned_buffer_deleter>(rawData, std::move(d));
+    auto data = std::unique_ptr<char[], aligned_buffer_deleter<T, A>>(rawData, std::move(d));
 
-    return detail::init_aligned_buffer(data, _size, bytesPerElementR.value, std::is_nothrow_default_constructible<T>{ });
+    return detail::init_aligned_buffer(data, _size, bytesPerElementR.value, std::is_nothrow_default_constructible<T>{ }, args...);
 }
 
 
 template <typename T, typename A>
-struct aligned_row_buffer_deleter : A // EBO
+struct aligned_row_buffer_deleter : private A // EBO
 {
     std::size_t rows_; // # elements
     std::size_t cols_; // # elements
@@ -167,7 +178,6 @@ struct aligned_row_buffer_deleter : A // EBO
             }
         }
     }
-
     void operator ()(char data[])
     {
         using ByteAllocator = typename std::allocator_traits<A>::template rebind_alloc<char>;
@@ -175,58 +185,69 @@ struct aligned_row_buffer_deleter : A // EBO
         destroy(data);
         std::allocator_traits<ByteAllocator>::deallocate(*this, data, rows_ * bytesPerRow_);
     }
+
+    A const& get_allocator(void) const noexcept { return *this; }
 };
 
-template <typename T, typename A>
+template <typename T, typename A, typename... Ts>
 std::unique_ptr<char[], aligned_row_buffer_deleter<T, A>>
 init_aligned_row_buffer(std::unique_ptr<char[], aligned_row_buffer_deleter<T, A>> data, std::size_t _rows, std::size_t _cols, std::size_t _bytesPerRow,
-    std::true_type /*isNothrowConstructible*/)
+    std::true_type /*isNothrowConstructible*/,
+    Ts const&... args)
 {
     for (std::ptrdiff_t i = 0, d = std::ptrdiff_t(_bytesPerRow), e = std::ptrdiff_t(_rows * _bytesPerRow), ncols = std::ptrdiff_t(_cols);
             i != e; i += d)
     {
         for (std::ptrdiff_t j = 0; j != ncols; ++j)
         {
-            std::allocator_traits<A>::construct(*this, reinterpret_cast<T*>(&data[i + j]));
+            std::allocator_traits<A>::construct(*this, reinterpret_cast<T*>(&data[i + j]), args...);
         }
     }
     data.get_deleter().elements_ = _rows * _cols;
     return data;
 }
-template <typename T, typename A>
+template <typename T, typename A, typename... Ts>
 std::unique_ptr<char[], aligned_row_buffer_deleter<T, A>>
 init_aligned_row_buffer(std::unique_ptr<char[], aligned_row_buffer_deleter<T, A>> data, std::size_t _rows, std::size_t _cols, std::size_t _bytesPerRow,
-    std::false_type /*isNothrowConstructible*/)
+    std::false_type /*isNothrowConstructible*/,
+    Ts const&... args)
 {
     for (std::ptrdiff_t i = 0, d = std::ptrdiff_t(_bytesPerRow), e = std::ptrdiff_t(_rows * _bytesPerRow), ncols = std::ptrdiff_t(_cols);
             i != e; i += d)
     {
         for (std::ptrdiff_t j = 0; j != ncols; ++j)
         {
-            std::allocator_traits<A>::construct(*this, reinterpret_cast<T*>(&data[i + j]));
+            std::allocator_traits<A>::construct(*this, reinterpret_cast<T*>(&data[i + j]), args...);
             ++data.get_deleter().elements_;
         }
     }
     return data;
 }
 
-template <typename T, alignment Alignment, typename A>
+template <typename T, typename A>
 std::unique_ptr<char[], aligned_row_buffer_deleter<T, A>>
-acquire_aligned_row_buffer(std::size_t _rows, std::size_t _cols, A _allocator)
+acquire_aligned_row_buffer(void)
+{
+    return std::unique_ptr<char[], aligned_row_buffer_deleter<T, A>>(
+        nullptr,
+        aligned_row_buffer_deleter<T, A>({ }, 0, 0, 0));
+}
+template <typename T, alignment Alignment, typename A, typename... Ts>
+std::unique_ptr<char[], aligned_row_buffer_deleter<T, A>>
+acquire_aligned_row_buffer(std::size_t _rows, std::size_t _cols, A _allocator, Ts const&... args)
 {
     using ByteAllocator = typename std::allocator_traits<A>::template rebind_alloc<char>;
 
-    auto alignmentInBytes = detail::alignment_in_bytes(Alignment);
     auto rawBytesPerRowR = detail::multiply_unsigned(sizeof(T), _cols);
-    auto bytesPerRowR = detail::ceili(rawBytesPerRowR, alignmentInBytes);
+    auto bytesPerRowR = detail::ceili(rawBytesPerRowR, detail::alignment_in_bytes(Alignment));
     auto numBytesR = detail::multiply_unsigned(_rows, bytesPerRowR.value);
     if (rawBytesPerRowR.ec != std::errc{ } || bytesPerRowR.ec != std::errc{ } || numBytesR.ec != std::errc{ }) throw std::bad_alloc{ };
-    auto d = aligned_row_buffer_deleter(std::move(_allocator), _rows, _cols, bytesPerRowR.value);
+    auto d = aligned_row_buffer_deleter<T, A>(std::move(_allocator), _rows, _cols, bytesPerRowR.value);
 
     char* rawData = std::allocator_traits<ByteAllocator>::allocate(d, numBytesR.value);
-    auto data = std::unique_ptr<char[], aligned_row_buffer_deleter>(rawData, std::move(d));
+    auto data = std::unique_ptr<char[], aligned_row_buffer_deleter<T, A>>(rawData, std::move(d));
 
-    return detail::init_aligned_row_buffer(data, _rows, _cols, bytesPerRowR.value, std::is_nothrow_default_constructible<T>{ });
+    return detail::init_aligned_row_buffer(data, _rows, _cols, bytesPerRowR.value, std::is_nothrow_default_constructible<T>{ }, args...);
 }
 
 

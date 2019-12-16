@@ -5,10 +5,10 @@
 
 #include <cstddef>  // for size_t, ptrdiff_t
 #include <memory>   // for unique_ptr<>, allocator<>
-#include <utility>  // for move()
+#include <utility>  // for move(), in_place (C++17)
 #include <iterator> // for random_access_iterator_tag
 
-#include <gsl/gsl-lite.hpp> // for Expects(), span<>, gsl_NODISCARD
+#include <gsl/gsl-lite.hpp> // for Expects(), span<>, gsl_NODISCARD, gsl_CPP17_OR_GREATER
 
 #include <sysmakeshift/memory.hpp> // for alignment, aligned_allocator<>
 
@@ -43,18 +43,42 @@ public:
     using iterator = detail::aligned_buffer_iterator<T>;
     using const_iterator = detail::aligned_buffer_iterator<T const>;
 
+    aligned_buffer(void) noexcept
+        : data_(detail::acquire_aligned_buffer<T, allocator_type>())
+    {
+    }
     explicit aligned_buffer(std::size_t _size)
         : data_(detail::acquire_aligned_buffer<T, Alignment, allocator_type>(_size, { }))
+    {
+    }
+    explicit aligned_buffer(std::size_t _size, T const& _value)
+        : data_(detail::acquire_aligned_buffer<T, Alignment, allocator_type>(_size, { }, _value))
     {
     }
     explicit aligned_buffer(std::size_t _size, A _allocator)
         : data_(detail::acquire_aligned_buffer<T, Alignment, allocator_type>(_size, std::move(_allocator)))
     {
     }
+    explicit aligned_buffer(std::size_t _size, T const& _value, A _allocator)
+        : data_(detail::acquire_aligned_buffer<T, Alignment, allocator_type>(_size, std::move(_allocator), _value))
+    {
+    }
+#if gsl_CPP17_OR_GREATER
+    template <typename... Ts>
+    explicit aligned_buffer(std::size_t _size, std::in_place_t, Ts const&... _args)
+        : data_(detail::acquire_aligned_buffer<T, Alignment, allocator_type>(_size, { }, _args...))
+    {
+    }
+    template <typename... Ts>
+    explicit aligned_buffer(std::size_t _size, A _allocator, std::in_place_t, Ts const&... _args)
+        : data_(detail::acquire_aligned_buffer<T, Alignment, allocator_type>(_size, std::move(_allocator), _args...))
+    {
+    }
+#endif // gsl_CPP17_OR_GREATER
 
     gsl_NODISCARD allocator_type get_allocator(void) const noexcept
     {
-        return data_.get_deleter();
+        return data_.get_deleter().get_allocator();
     }
 
     gsl_NODISCARD std::size_t size(void) const noexcept
@@ -139,18 +163,42 @@ public:
     using iterator = detail::aligned_row_buffer_iterator<T>;
     using const_iterator = detail::aligned_row_buffer_iterator<T const>;
 
+    explicit aligned_row_buffer(void) noexcept
+        : data_(detail::acquire_aligned_row_buffer<T, allocator_type>())
+    {
+    }
     explicit aligned_row_buffer(std::size_t _rows, std::size_t _cols)
         : data_(detail::acquire_aligned_row_buffer<T, Alignment, allocator_type>(_rows, _cols, { }))
+    {
+    }
+    explicit aligned_row_buffer(std::size_t _rows, std::size_t _cols, T const& _value)
+        : data_(detail::acquire_aligned_row_buffer<T, Alignment, allocator_type>(_rows, _cols, { }, _value))
     {
     }
     explicit aligned_row_buffer(std::size_t _rows, std::size_t _cols, A _allocator)
         : data_(detail::acquire_aligned_row_buffer<T, Alignment, allocator_type>(_rows, _cols, std::move(_allocator)))
     {
     }
+    explicit aligned_row_buffer(std::size_t _rows, std::size_t _cols, T const& _value, A _allocator)
+        : data_(detail::acquire_aligned_row_buffer<T, Alignment, allocator_type>(_rows, _cols, std::move(_allocator), _value))
+    {
+    }
+#if gsl_CPP17_OR_GREATER
+    template <typename... Ts>
+    explicit aligned_row_buffer(std::size_t _rows, std::size_t _cols, std::in_place_t, Ts const&... _args)
+        : data_(detail::acquire_aligned_row_buffer<T, Alignment, allocator_type>(_rows, _cols, { }, _args...))
+    {
+    }
+    template <typename... Ts>
+    explicit aligned_row_buffer(std::size_t _rows, std::size_t _cols, A _allocator, std::in_place_t, Ts const&... _args)
+        : data_(detail::acquire_aligned_row_buffer<T, Alignment, allocator_type>(_rows, _cols, std::move(_allocator), _args...))
+    {
+    }
+#endif // gsl_CPP17_OR_GREATER
 
     gsl_NODISCARD allocator_type get_allocator(void) const noexcept
     {
-        return data_.get_deleter();
+        return data_.get_deleter().get_allocator();
     }
 
     gsl_NODISCARD std::size_t rows(void) const noexcept
