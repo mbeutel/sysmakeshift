@@ -21,8 +21,8 @@ namespace sysmakeshift
     // sub-architectures, so the constexpr value defined here should depend only on architecture (e.g. x64), not on sub-architecture (e.g. Intel "Penryn").
 
 #if defined(_M_IX86) || defined(_M_AMD64) || defined(__i386__) || defined(__x86_64__)
-  constexpr std::size_t hardware_constructive_interference_size = 64;
-  constexpr std::size_t hardware_destructive_interference_size = 64;
+constexpr std::size_t hardware_constructive_interference_size = 64;
+constexpr std::size_t hardware_destructive_interference_size = 64;
 #else
  #error Unsupported architecture.
 #endif // defined(_M_IX86) || defined(_M_AMD64) || defined(__i386__) || defined(__x86_64__)

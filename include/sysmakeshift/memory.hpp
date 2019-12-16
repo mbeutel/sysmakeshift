@@ -98,7 +98,7 @@ gsl_NODISCARD bool operator !=(zero_init_allocator<T> const& x, zero_init_alloca
     //ᅟ
     // Represents an alignment to use for aligned allocations.
     // In addition to the special values, any positive integer that is a power of 2 may be cast to `alignment`.
-    // Multiple alignment requirements can be combined using bitmask operations, e.g. `alignment::cache_line | alignment(sizeof(T))`.
+    // Multiple alignment requirements can be combined using bitmask operations, e.g. `alignment::cache_line | alignment(alignof(T))`.
     //
 enum class alignment : std::size_t
 {
@@ -111,61 +111,10 @@ SYSMAKESHIFT_DEFINE_ENUM_BITMASK_OPERATORS(alignment)
 
 
     //ᅟ
-    // Allocator adaptor that aligns memory allocations by the given size.
-    //
-template <typename T, alignment Alignment, typename A>
-    class aligned_allocator : public A
-{
-public:
-    using A::A;
-
-    template <typename U>
-    struct rebind
-    {
-        using other = aligned_allocator<U, Alignment, typename std::allocator_traits<A>::template rebind_alloc<U>>;
-    };
-
-    gsl_NODISCARD T* allocate(std::size_t n)
-    {
-        std::size_t a = detail::alignment_in_bytes(Alignment | alignment(alignof(T)));
-        if (n >= std::numeric_limits<std::size_t>::max() / sizeof(T)) throw std::bad_alloc{ }; // overflow
-        std::size_t nbData = n * sizeof(T);
-        std::size_t nbAlloc = nbData + a + sizeof(void*) - 1;
-        if (nbAlloc < nbData) throw std::bad_alloc{ }; // overflow
-
-        using ByteAllocator = typename std::allocator_traits<A>::template rebind_alloc<char>;
-        auto byteAllocator = ByteAllocator(*this); // may not throw
-        void* mem = std::allocator_traits<ByteAllocator>::allocate(byteAllocator, nbAlloc);
-        void* alignedMem = mem;
-        void* alignResult = std::align(a, nbData + sizeof(void*), alignedMem, nbAlloc);
-        Expects(alignResult != nullptr && nbAlloc >= nbData + sizeof(void*)); // should not happen
-
-            // Store pointer to actual allocation at end of buffer. Use `memcpy()` so we don't have to worry about alignment.
-        std::memcpy(static_cast<char*>(alignResult) + nbData, &mem, sizeof(void*));
-
-        return static_cast<T*>(alignResult);
-    }
-    void deallocate(T* ptr, std::size_t n) noexcept
-    {
-        std::size_t a = detail::alignment_in_bytes(Alignment | alignment(alignof(T)));
-        std::size_t nbData = n * sizeof(T); // cannot overflow due to preceding check in allocate()
-        std::size_t nbAlloc = nbData + a + sizeof(void*) - 1; // cannot overflow due to preceding check in allocate()
-
-            // Retrieve pointer to actual allocation from end of buffer. Use `memcpy()` so we don't have to worry about alignment.
-        void* mem;
-        std::memcpy(&mem, reinterpret_cast<char*>(ptr) + nbData, sizeof(void*));
-        
-        using ByteAllocator = typename std::allocator_traits<A>::template rebind_alloc<char>;
-        auto byteAllocator = ByteAllocator(*this); // may not throw
-        std::allocator_traits<ByteAllocator>::deallocate(byteAllocator, static_cast<char*>(mem), nbAlloc);
-    }
-};
-
-    //ᅟ
     // Allocator that aligns memory allocations by the given size using the default allocator, i.e. global `operator new()` with `std::align_val_t`.
     //
 template <typename T, alignment Alignment>
-    class aligned_default_allocator
+class aligned_default_allocator
 {
 public:
     using value_type = T;
@@ -212,6 +161,70 @@ gsl_NODISCARD bool operator !=(aligned_default_allocator<T, Alignment> x, aligne
 
 
     //ᅟ
+    // Allocator adaptor that aligns memory allocations by the given size.
+    //
+template <typename T, alignment Alignment, typename A>
+class aligned_allocator : public A
+{
+public:
+    using A::A; // TODO: does this allow constructing an aligned allocator from the underlying allocator?
+
+    template <typename U>
+    struct rebind
+    {
+        using other = aligned_allocator<U, Alignment, typename std::allocator_traits<A>::template rebind_alloc<U>>;
+    };
+
+    gsl_NODISCARD T* allocate(std::size_t n)
+    {
+        std::size_t a = detail::alignment_in_bytes(Alignment | alignment(alignof(T)));
+        if (n >= std::numeric_limits<std::size_t>::max() / sizeof(T)) throw std::bad_alloc{ }; // overflow
+        std::size_t nbData = n * sizeof(T);
+        std::size_t nbAlloc = nbData + a + sizeof(void*) - 1;
+        if (nbAlloc < nbData) throw std::bad_alloc{ }; // overflow
+
+        using ByteAllocator = typename std::allocator_traits<A>::template rebind_alloc<char>;
+        auto byteAllocator = ByteAllocator(*this); // may not throw
+        void* mem = std::allocator_traits<ByteAllocator>::allocate(byteAllocator, nbAlloc);
+        void* alignedMem = mem;
+        void* alignResult = std::align(a, nbData + sizeof(void*), alignedMem, nbAlloc);
+        Expects(alignResult != nullptr && nbAlloc >= nbData + sizeof(void*)); // should not happen
+
+            // Store pointer to actual allocation at end of buffer. Use `memcpy()` so we don't have to worry about alignment.
+        std::memcpy(static_cast<char*>(alignResult) + nbData, &mem, sizeof(void*));
+
+        return static_cast<T*>(alignResult);
+    }
+    void deallocate(T* ptr, std::size_t n) noexcept
+    {
+        std::size_t a = detail::alignment_in_bytes(Alignment | alignment(alignof(T)));
+        std::size_t nbData = n * sizeof(T); // cannot overflow due to preceding check in allocate()
+        std::size_t nbAlloc = nbData + a + sizeof(void*) - 1; // cannot overflow due to preceding check in allocate()
+
+            // Retrieve pointer to actual allocation from end of buffer. Use `memcpy()` so we don't have to worry about alignment.
+        void* mem;
+        std::memcpy(&mem, reinterpret_cast<char*>(ptr) + nbData, sizeof(void*));
+        
+        using ByteAllocator = typename std::allocator_traits<A>::template rebind_alloc<char>;
+        auto byteAllocator = ByteAllocator(*this); // may not throw
+        std::allocator_traits<ByteAllocator>::deallocate(byteAllocator, static_cast<char*>(mem), nbAlloc);
+    }
+};
+template <typename T, alignment Alignment>
+class aligned_allocator<T, Alignment, aligned_default_allocator<T, Alignment>> : public aligned_default_allocator<T, Alignment>
+{
+public:
+    using aligned_default_allocator<T, Alignment>::aligned_default_allocator; // TODO: does this allow constructing an aligned allocator from the underlying allocator?
+
+    template <typename U>
+    struct rebind
+    {
+        using other = aligned_allocator<U, Alignment, typename std::allocator_traits<aligned_default_allocator<T, Alignment>>::template rebind_alloc<U>>;
+    };
+};
+
+
+    //ᅟ
     // Deleter for `std::unique_ptr<>` which supports custom allocators.
     //ᅟ
     //ᅟ    auto p1 = allocate_unique<float>(MyAllocator<float>{ }, 3.14159f); // returns `std::unique_ptr<float, allocator_deleter<float, MyAllocator<float>>>`
@@ -243,7 +256,7 @@ public:
         : A(_alloc), size_(_size)
     {
     }
-    void operator ()(T* ptr)
+    void operator ()(T ptr[])
     {
         for (std::ptrdiff_t i = 0, n = std::ptrdiff_t(size_); i != n; ++i)
         {
@@ -260,7 +273,7 @@ public:
         : A(_alloc)
     {
     }
-    void operator ()(T* ptr)
+    void operator ()(T ptr[])
     {
         for (std::ptrdiff_t i = 0; i != N; ++i)
         {
