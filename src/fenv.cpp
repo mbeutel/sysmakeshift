@@ -94,12 +94,12 @@ gsl_NODISCARD bool try_set_trapping_fe_exceptions(int excepts) noexcept
     int exceptsToDisable = ~excepts & (flags & FE_ALL_EXCEPT);
     if (exceptsToEnable != 0)
     {
-        int result = feenableexcept(excepts);
+        int result = feenableexcept(exceptsToEnable);
         if (result == -1) return false;
     }
     if (exceptsToDisable != 0)
     {
-        int result = fedisableexcept(excepts);
+        int result = fedisableexcept(exceptsToDisable);
         if (result == -1) return false;
     }
     return true;
