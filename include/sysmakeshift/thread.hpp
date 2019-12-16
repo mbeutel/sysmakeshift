@@ -101,7 +101,7 @@ public:
         //
     class task_context
     {
-        friend detail::thread_pool_thread_data;
+        friend detail::thread_pool_thread;
         friend detail::thread_pool_impl;
 
     private:

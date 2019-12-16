@@ -287,25 +287,37 @@ static std::atomic<unsigned> threadPoolCounter{ };
 class barrier
 {
 private:
-    std::atomic<std::size_t> value_;
-    std::size_t baseValue_;
+    std::atomic<unsigned> value_;
+    unsigned baseValue_;
+    unsigned numThreads_;
     std::condition_variable cv_;
     std::mutex m_;
 
 public:
-    barrier(void)
-        : value_(0), baseValue_(0)
+    barrier(int _numThreads)
+        : value_(0), baseValue_(0), numThreads_(static_cast<unsigned>(_numThreads))
     {
+            // We permit constructing a barrier with 0 threads, but calling `wait()` on it is illegal.
+        Expects(_numThreads >= 0);
+
+            // This is necessary to permit overlapping rounds.
+        Expects(_numThreads < std::numeric_limits<unsigned>::max() / 2);
     }
 
-    bool wait(std::size_t numThreads)
+    bool wait()
     {
-        std::size_t pos = value_.fetch_add(1, std::memory_order::memory_order_acq_rel);
-        auto targetValue = baseValue_ + numThreads; // may overflow
-        if (pos == targetValue)
+        Expects(numThreads_ != 0);
+
+        if (numThreads_ == 1) return true;
+
+        auto lbaseValue = baseValue_;
+        unsigned pos = value_.fetch_add(1, std::memory_order::memory_order_seq_cst) + 1; // may overflow
+        if (pos == lbaseValue + numThreads_) // may overflow
         {
                 // We are the last thread to arrive at the barrier. Update the base value and signal the condition variable.
+            auto lock = std::unique_lock(m_);
             baseValue_ = pos;
+            lock.unlock();
             cv_.notify_all();
             return true;
         }
@@ -313,7 +325,7 @@ public:
         {
                 // We need to wait for other threads to arrive.
             auto lock = std::unique_lock(m_);
-            while (value_.load(std::memory_order::memory_order_acquire) != targetValue)
+            while (value_.load(std::memory_order::memory_order_relaxed) - lbaseValue < numThreads_)
             {
                 cv_.wait(lock);
             }
@@ -331,14 +343,13 @@ struct thread_pool_job
     std::shared_future<std::optional<thread_pool_job>> nextJob;
 };
 
-struct thread_pool_thread_data
+struct thread_pool_thread
 {
     thread_pool_impl& impl_;
-    barrier barrier_;
     std::shared_future<std::optional<thread_pool_job>> nextJob_;
     int threadIdx_;
 
-    thread_pool_thread_data(thread_pool_impl& _impl, std::shared_future<std::optional<thread_pool_job>> _nextJob)
+    thread_pool_thread(thread_pool_impl& _impl, std::shared_future<std::optional<thread_pool_job>> const& _nextJob) noexcept
         : impl_(_impl),
           nextJob_(std::move(_nextJob)),
           threadIdx_(0) // to be set afterwards
@@ -365,8 +376,9 @@ private:
 # error Unsupported operating system.
 #endif // _WIN32
 
+    barrier barrier_;
     std::promise<std::optional<thread_pool_job>> nextJob_;
-    aligned_buffer<thread_pool_thread_data, alignment::cache_line> data_;
+    aligned_buffer<thread_pool_thread, alignment::cache_line> data_;
 #ifdef _WIN32
     unsigned threadPoolId_; // for runtime thread identification during debugging
 #endif // _WIN32
@@ -427,6 +439,7 @@ private:
 public:
     thread_pool_impl(thread_pool::params const& p)
         : thread_pool_impl_base{ p.num_threads },
+          barrier_(p.num_threads),
           nextJob_{ },
           data_(gsl::narrow_cast<std::size_t>(p.num_threads), std::in_place, *this, nextJob_.get_future().share()),
 #ifdef _WIN32
@@ -446,7 +459,7 @@ public:
         for (int i = 0; i < p.num_threads; ++i)
         {
             auto handle = detail::win32_handle(
-                (HANDLE) ::_beginthreadex(NULL, 0, &thread_pool_thread_data::threadFunc, &data_[i], threadCreationFlags, nullptr));
+                (HANDLE) ::_beginthreadex(NULL, 0, &thread_pool_thread::threadFunc, &data_[i], threadCreationFlags, nullptr));
             detail::win32Assert(handle != nullptr);
             if (p.pin_to_hardware_threads)
             {
@@ -463,6 +476,12 @@ public:
         hardwareThreadMappings_.assign(p.hardware_thread_mappings.begin(), p.hardware_thread_mappings.end());
 #endif // _WIN32
     }
+
+    bool wait_at_barrier(void)
+    {
+        return barrier_.wait();
+    }
+
 
 #ifdef _WIN32
     unsigned thread_pool_id(void) const noexcept { return threadPoolId_; }
@@ -490,7 +509,7 @@ public:
                 detail::setThreadAttrAffinity(attr.attr, getHardwareThreadId(i, maxNumHardwareThreads_, hardwareThreadMappings_));
             }
             auto handle = pthread_t{ };
-            detail::posixCheck(::pthread_create(&handle, &attr.attr, &thread_pool_thread_data::threadFunc, &data[i]));
+            detail::posixCheck(::pthread_create(&handle, &attr.attr, &thread_pool_thread::threadFunc, &data[i]));
             handles_[i] = pthread_handle(handle);
         }
 
@@ -508,7 +527,6 @@ public:
             *completion = completionPromise->get_future();
         }
         auto nextJobPromise = std::promise<std::optional<thread_pool_job>>{ };
-        auto nextJobFuture = nextJobPromise.get_future();
         nextJob_.set_value(thread_pool_job{ std::move(action), std::move(completionPromise), concurrency, nextJobPromise.get_future().share() });
         nextJob_ = std::move(nextJobPromise);
 #ifndef _WIN32
@@ -559,7 +577,7 @@ static void runJob(std::function<void(thread_pool::task_context)> action, thread
     action(arg);
 }
 
-void thread_pool_thread_data::operator ()(void)
+void thread_pool_thread::operator ()(void)
 {
     for (;;)
     {
@@ -569,26 +587,34 @@ void thread_pool_thread_data::operator ()(void)
             nextJob_ = { };
             break;
         }
-        nextJob_ = std::move(job->nextJob);
 
             // Only the first `concurrency` threads shall participate in executing this task.
-        if (job->concurrency != 0 && threadIdx_ < job->concurrency)
+        int concurrency = job->concurrency;
+        if (concurrency == 0)
+        {
+            concurrency = impl_.numThreads_;
+        }
+        if (threadIdx_ < concurrency)
         {
             runJob(job->action, thread_pool::task_context{ impl_, threadIdx_ });
         }
 
-        bool lastToArrive = barrier_.wait(static_cast<std::size_t>(job->concurrency));
+        bool lastToArrive = impl_.wait_at_barrier();
         if (lastToArrive && job->completion.has_value())
         {
             job->completion->set_value();
         }
+
+            // The extra indirection is necessary to keep the object alive while copying it.
+        auto newNextJob = job->nextJob;
+        nextJob_ = std::move(newNextJob);
     }
 }
 
 #ifdef _WIN32
-unsigned __stdcall thread_pool_thread_data::threadFunc(void* data)
+unsigned __stdcall thread_pool_thread::threadFunc(void* data)
 {
-    thread_pool_thread_data& self = *static_cast<thread_pool_thread_data*>(data);
+    thread_pool_thread& self = *static_cast<thread_pool_thread*>(data);
     {
         wchar_t buf[64];
         std::swprintf(buf, sizeof buf / sizeof(wchar_t), L"sysmakeshift thread pool #%d, thread %d",
@@ -599,9 +625,9 @@ unsigned __stdcall thread_pool_thread_data::threadFunc(void* data)
     return 0;
 }
 #else // ^^^ _WIN32 ^^^ / vvv !_WIN32 vvv
-void* thread_pool_thread_data::threadFunc(void* data)
+void* thread_pool_thread::threadFunc(void* data)
 {
-    thread_pool_thread_data& self = *static_cast<thread_pool_thread_data*>(data);
+    thread_pool_thread& self = *static_cast<thread_pool_thread*>(data);
     self();
     return nullptr;
 }

@@ -15,7 +15,7 @@ namespace detail
 {
 
 
-struct thread_pool_thread_data;
+struct thread_pool_thread;
 
 struct thread_pool_impl_base
 {
