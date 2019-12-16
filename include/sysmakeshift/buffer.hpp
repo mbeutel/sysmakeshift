@@ -29,7 +29,7 @@ public:
     using allocator_type = aligned_allocator<T, Alignment, A>;
 
 private:
-    std::unique_ptr<char[], detail::aligned_buffer_deleter<T, A>> data_;
+    std::unique_ptr<char[], detail::aligned_buffer_deleter<T, allocator_type>> data_;
 
 public:
     using value_type = T;
@@ -65,13 +65,13 @@ public:
     }
 #if gsl_CPP17_OR_GREATER
     template <typename... Ts>
-    explicit aligned_buffer(std::size_t _size, std::in_place_t, Ts const&... _args)
-        : data_(detail::acquire_aligned_buffer<T, Alignment, allocator_type>(_size, { }, _args...))
+    explicit aligned_buffer(std::size_t _size, std::in_place_t, Ts&&... _args)
+        : data_(detail::acquire_aligned_buffer<T, Alignment, allocator_type>(_size, { }, std::forward<Ts>(_args)...))
     {
     }
     template <typename... Ts>
-    explicit aligned_buffer(std::size_t _size, A _allocator, std::in_place_t, Ts const&... _args)
-        : data_(detail::acquire_aligned_buffer<T, Alignment, allocator_type>(_size, std::move(_allocator), _args...))
+    explicit aligned_buffer(std::size_t _size, A _allocator, std::in_place_t, Ts&&... _args)
+        : data_(detail::acquire_aligned_buffer<T, Alignment, allocator_type>(_size, std::move(_allocator), std::forward<Ts>(_args)...))
     {
     }
 #endif // gsl_CPP17_OR_GREATER
@@ -89,13 +89,13 @@ public:
     {
         Expects(i < data_.get_deleter().size_);
 
-        return &data_.get()[i * data_.get_deleter().bytesPerElement_];
+        return reinterpret_cast<reference>(data_.get()[i * data_.get_deleter().bytesPerElement_]);
     }
     gsl_NODISCARD const_reference operator [](std::size_t i) const
     {
         Expects(i < data_.get_deleter().size_);
 
-        return &data_.get()[i * data_.get_deleter().bytesPerElement_];
+        return reinterpret_cast<reference>(data_.get()[i * data_.get_deleter().bytesPerElement_]);
     }
 
     gsl_NODISCARD iterator begin(void) noexcept
@@ -152,7 +152,7 @@ class aligned_row_buffer
 private:
     using allocator_type = aligned_allocator<T, Alignment, A>;
 
-    std::unique_ptr<char[], detail::aligned_row_buffer_deleter<T, A>> data_;
+    std::unique_ptr<char[], detail::aligned_row_buffer_deleter<T, allocator_type>> data_;
 
 public:
     using size_type = std::size_t;
@@ -185,13 +185,13 @@ public:
     }
 #if gsl_CPP17_OR_GREATER
     template <typename... Ts>
-    explicit aligned_row_buffer(std::size_t _rows, std::size_t _cols, std::in_place_t, Ts const&... _args)
-        : data_(detail::acquire_aligned_row_buffer<T, Alignment, allocator_type>(_rows, _cols, { }, _args...))
+    explicit aligned_row_buffer(std::size_t _rows, std::size_t _cols, std::in_place_t, Ts&&... _args)
+        : data_(detail::acquire_aligned_row_buffer<T, Alignment, allocator_type>(_rows, _cols, { }, std::forward<Ts>(_args)...))
     {
     }
     template <typename... Ts>
-    explicit aligned_row_buffer(std::size_t _rows, std::size_t _cols, A _allocator, std::in_place_t, Ts const&... _args)
-        : data_(detail::acquire_aligned_row_buffer<T, Alignment, allocator_type>(_rows, _cols, std::move(_allocator), _args...))
+    explicit aligned_row_buffer(std::size_t _rows, std::size_t _cols, A _allocator, std::in_place_t, Ts&&... _args)
+        : data_(detail::acquire_aligned_row_buffer<T, Alignment, allocator_type>(_rows, _cols, std::move(_allocator), std::forward<Ts>(_args)...))
     {
     }
 #endif // gsl_CPP17_OR_GREATER
@@ -218,13 +218,13 @@ public:
     {
         Expects(i < data_.get_deleter().rows_);
 
-        return { &data_.get()[i * data_.get_deleter().bytesPerRow_], data_.get_deleter().cols_ };
+        return { reinterpret_cast<reference>(&data_.get()[i * data_.get_deleter().bytesPerRow_]), data_.get_deleter().cols_ };
     }
     gsl_NODISCARD gsl::span<T const> operator [](std::size_t i) const
     {
         Expects(i < data_.get_deleter().rows_);
 
-        return { &data_.get()[i * data_.get_deleter().bytesPerRow_], data_.get_deleter().cols_ };
+        return { reinterpret_cast<reference>(&data_.get()[i * data_.get_deleter().bytesPerRow_]), data_.get_deleter().cols_ };
     }
 
     gsl_NODISCARD iterator begin(void) noexcept

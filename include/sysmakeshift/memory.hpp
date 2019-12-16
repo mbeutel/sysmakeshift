@@ -167,7 +167,7 @@ template <typename T, alignment Alignment, typename A>
 class aligned_allocator : public A
 {
 public:
-    using A::A; // TODO: does this allow constructing an aligned allocator from the underlying allocator?
+    using A::A;
 
     template <typename U>
     struct rebind
