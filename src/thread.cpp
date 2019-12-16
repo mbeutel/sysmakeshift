@@ -339,6 +339,7 @@ struct thread_pool_job
     std::function<void(thread_pool::task_context)> action;
     mutable std::optional<std::promise<void>> completion; // mutable because otherwise we cannot fulfill the promise
     int concurrency = 0;
+    bool last = false;
     std::shared_future<std::optional<thread_pool_job>> nextJob;
 };
 
@@ -517,7 +518,7 @@ public:
 #endif // _WIN32
     }
 
-    void schedule_job(std::future<void>* completion, std::function<void(thread_pool::task_context)> action, int concurrency) noexcept // We cannot really failure in future chaining.
+    void schedule_job(std::future<void>* completion, std::function<void(thread_pool::task_context)> action, int concurrency, bool last) noexcept // We cannot really failure in future chaining.
     {
         auto completionPromise = std::optional<std::promise<void>>{ };
         if (completion != nullptr)
@@ -526,7 +527,7 @@ public:
             *completion = completionPromise->get_future();
         }
         auto nextJobPromise = std::promise<std::optional<thread_pool_job>>{ };
-        nextJob_.set_value(thread_pool_job{ std::move(action), std::move(completionPromise), concurrency, nextJobPromise.get_future().share() });
+        nextJob_.set_value(thread_pool_job{ std::move(action), std::move(completionPromise), concurrency, last, nextJobPromise.get_future().share() });
         nextJob_ = std::move(nextJobPromise);
 #ifndef _WIN32
         needLaunch_ = true;
@@ -598,10 +599,13 @@ void thread_pool_thread::operator ()(void)
             runJob(job->action, thread_pool::task_context{ impl_, threadIdx_ });
         }
 
-        bool lastToArrive = impl_.wait_at_barrier();
-        if (lastToArrive && job->completion.has_value())
+        if (!job->last || job->completion.has_value())
         {
-            job->completion->set_value();
+            bool lastToArrive = impl_.wait_at_barrier();
+            if (lastToArrive && job->completion.has_value())
+            {
+                job->completion->set_value();
+            }
         }
 
             // The extra indirection is necessary to keep the object alive while copying it.
@@ -664,7 +668,7 @@ detail::thread_pool_handle thread_pool::create(thread_pool::params p)
 void thread_pool::do_run(std::future<void>* completion, std::function<void(task_context)> action, int concurrency, bool join)
 {
     auto& impl = static_cast<detail::thread_pool_impl&>(*handle_.get());
-    impl.schedule_job(join ? nullptr : completion, std::move(action), concurrency);
+    impl.schedule_job(join ? nullptr : completion, std::move(action), concurrency, join);
     if (join)
     {
         auto lhandle = detail::thread_pool_handle(std::move(handle_));
