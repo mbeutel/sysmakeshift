@@ -223,7 +223,7 @@ private:
     pthread_t handle_;
 
 public:
-    pthread_t handle(void) const noexcept { return handle_; }
+    pthread_t get(void) const noexcept { return handle_; }
     pthread_t release(void) noexcept { return std::exchange(handle_, { }); }
 
     explicit operator bool(void) const noexcept { return handle_ != pthread_t{ }; }
@@ -301,7 +301,7 @@ public:
         Expects(_numThreads >= 0);
 
             // This is necessary to permit overlapping rounds.
-        Expects(_numThreads < std::numeric_limits<unsigned>::max() / 2);
+        Expects(numThreads_ < std::numeric_limits<unsigned>::max() / 2);
     }
 
     bool wait()
@@ -351,7 +351,7 @@ struct thread_pool_thread
 
     thread_pool_thread(thread_pool_impl& _impl, std::shared_future<std::optional<thread_pool_job>> const& _nextJob) noexcept
         : impl_(_impl),
-          nextJob_(std::move(_nextJob)),
+          nextJob_(_nextJob),
           threadIdx_(0) // to be set afterwards
     {
     }
@@ -421,8 +421,8 @@ private:
             // Join threads. It is possible that this can be improved with a tree-like wait chain.
         for (int i = 0; i < numThreads_; ++i)
         {
-            detail::posixCheck(::pthread_join(threadHandles[i].handle(), NULL));
-            threadHandles[i].release();
+            detail::posixCheck(::pthread_join(handles_[i].get(), NULL));
+            handles_[i].release();
         }
 #endif // _WIN32
     }
@@ -509,7 +509,7 @@ public:
                 detail::setThreadAttrAffinity(attr.attr, getHardwareThreadId(i, maxNumHardwareThreads_, hardwareThreadMappings_));
             }
             auto handle = pthread_t{ };
-            detail::posixCheck(::pthread_create(&handle, &attr.attr, &thread_pool_thread::threadFunc, &data[i]));
+            detail::posixCheck(::pthread_create(&handle, &attr.attr, &thread_pool_thread::threadFunc, &data_[i]));
             handles_[i] = pthread_handle(handle);
         }
 

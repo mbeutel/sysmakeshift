@@ -249,7 +249,7 @@ acquire_aligned_row_buffer(std::size_t _rows, std::size_t _cols, A _allocator, T
     using ByteAllocator = typename std::allocator_traits<A>::template rebind_alloc<char>;
 
     auto rawBytesPerRowR = detail::multiply_unsigned(sizeof(T), _cols);
-    auto bytesPerRowR = detail::ceili(rawBytesPerRowR, detail::alignment_in_bytes(Alignment));
+    auto bytesPerRowR = detail::ceili(rawBytesPerRowR.value, detail::alignment_in_bytes(Alignment));
     auto numBytesR = detail::multiply_unsigned(_rows, bytesPerRowR.value);
     if (rawBytesPerRowR.ec != std::errc{ } || bytesPerRowR.ec != std::errc{ } || numBytesR.ec != std::errc{ }) throw std::bad_alloc{ };
     auto d = aligned_row_buffer_deleter<T, A>(std::move(_allocator), _rows, _cols, bytesPerRowR.value);
@@ -306,7 +306,7 @@ public:
 #endif // __cpp_lib_concepts
     using iterator_category = std::random_access_iterator_tag;
     using value_type        = T;
-    using difference_type   = typename std::ptrdiff_t;
+    using difference_type   = std::ptrdiff_t;
     using pointer           = T*;
     using reference         = T&;
 
@@ -453,7 +453,7 @@ public:
 #endif // __cpp_lib_concepts
     using iterator_category = input_output_iterator_tag;
     using value_type        = gsl::span<T>;
-    using difference_type   = typename std::ptrdiff_t;
+    using difference_type   = std::ptrdiff_t;
     using reference         = gsl::span<T>;
 
     friend bool operator ==(aligned_row_buffer_iterator const& lhs, aligned_row_buffer_iterator const& rhs)
