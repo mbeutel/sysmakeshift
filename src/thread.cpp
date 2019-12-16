@@ -287,7 +287,7 @@ static std::atomic<unsigned> threadPoolCounter{ };
 class barrier
 {
 private:
-    std::atomic<unsigned> value_;
+    unsigned value_;
     unsigned baseValue_;
     unsigned numThreads_;
     std::condition_variable cv_;
@@ -311,11 +311,11 @@ public:
         if (numThreads_ == 1) return true;
 
         auto lbaseValue = baseValue_;
-        unsigned pos = value_.fetch_add(1, std::memory_order::memory_order_seq_cst) + 1; // may overflow
+        auto lock = std::unique_lock(m_);
+        unsigned pos = ++value_;
         if (pos == lbaseValue + numThreads_) // may overflow
         {
                 // We are the last thread to arrive at the barrier. Update the base value and signal the condition variable.
-            auto lock = std::unique_lock(m_);
             baseValue_ = pos;
             lock.unlock();
             cv_.notify_all();
@@ -324,8 +324,7 @@ public:
         else
         {
                 // We need to wait for other threads to arrive.
-            auto lock = std::unique_lock(m_);
-            while (value_.load(std::memory_order::memory_order_relaxed) - lbaseValue < numThreads_)
+            while (value_ - lbaseValue < numThreads_)
             {
                 cv_.wait(lock);
             }
