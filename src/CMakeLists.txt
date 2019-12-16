@@ -8,6 +8,7 @@ cmake_minimum_required(VERSION 3.15)
 
 # dependencies
 find_package(CMakeshift 3.7 REQUIRED)
+find_package(Threads REQUIRED)
 find_package(gsl-lite 0.35.3 REQUIRED)
 
 # library target
@@ -43,6 +44,7 @@ endif()
 # library dependencies
 target_link_libraries(sysmakeshift
     PUBLIC
+        Threads::Threads
         gsl::gsl-lite-v1)
 
 # installation: public header files, target

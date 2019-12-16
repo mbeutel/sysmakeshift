@@ -7,9 +7,10 @@
 cmake_minimum_required(VERSION 3.15)
 
 # dependencies
-find_package(Catch2 2.9 REQUIRED)
 find_package(CMakeshift 3.7 REQUIRED)
+find_package(Threads REQUIRED)
 find_package(gsl-lite 0.35.3 REQUIRED)
+find_package(Catch2 2.9 REQUIRED)
 
 # test targets
 add_executable(test-sysmakeshift
@@ -54,6 +55,7 @@ target_compile_definitions(test-sysmakeshift
 # test dependencies
 target_link_libraries(test-sysmakeshift
     PRIVATE
+        Threads::Threads
         gsl::gsl-lite-v1
         Catch2::Catch2
         sysmakeshift)

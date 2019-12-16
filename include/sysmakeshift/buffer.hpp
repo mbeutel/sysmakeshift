@@ -19,6 +19,12 @@ namespace sysmakeshift
 {
 
 
+    //ᅟ
+    // Buffer with aligned elements.
+    //ᅟ
+    //ᅟ    auto threadData = aligned_buffer<ThreadData, alignment::cache_line>(numThreads);
+    //ᅟ    // every `threadData[i]` has cache-line alignment => no false sharing
+    //
 template <typename T, alignment Alignment, typename A = std::allocator<T>>
 class aligned_buffer
 {
@@ -143,6 +149,12 @@ public:
 };
 
 
+    //ᅟ
+    // Two-dimensional buffer with aligned rows.
+    //ᅟ
+    //ᅟ    auto threadData = aligned_buffer<float, alignment::cache_line>(rows, cols);
+    //ᅟ    // every `threadData[i][0]` has cache-line alignment => no false sharing
+    //
 template <typename T, alignment Alignment, typename A = std::allocator<T>>
 class aligned_row_buffer
 {
