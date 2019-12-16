@@ -63,8 +63,6 @@ public:
     //
 class thread_pool
 {
-    struct internal_ { };
-
 public:
         //ᅟ
         // Thread pool parameters.
@@ -80,7 +78,7 @@ public:
             // Maximal number of hardware threads to pin threads to. A value of 0 indicates "as many as possible".
             // If `max_num_hardware_threads` is 0 and `hardware_thread_mappings` is non-empty, `hardware_thread_mappings.size()` is taken as the
             // maximal number of hardware threads to pin threads to.
-            // If `hardware_thread_mappings` is not empty, `max_num_hardware_threads` may not be larger than `hardware_thread_mappings.size()`.
+            // If `hardware_thread_mappings` is not empty, `max_num_hardware_threads` must not be larger than `hardware_thread_mappings.size()`.
             // Can be useful to increase reproducibility of synchronization and data race bugs by running multiple threads on the same core.
             //
         int max_num_hardware_threads = 0;
@@ -104,6 +102,7 @@ public:
     class task_context
     {
         friend detail::thread_pool_thread_data;
+        friend detail::thread_pool_impl;
 
     private:
         detail::thread_pool_impl_base& impl_;
@@ -127,9 +126,7 @@ public:
     };
 
 private:
-    gsl::not_null<std::unique_ptr<detail::thread_pool_impl_base>> impl_;
-
-    thread_pool(params const& p, internal_);
+    gsl::not_null<detail::thread_pool_handle> handle_;
 
     static params const& check_params(params const& p)
     {
@@ -139,25 +136,25 @@ private:
         return p;
     }
 
-    void do_run(std::future<void>* future, std::function<void(task_context)> task, int concurrency, bool join);
+    static detail::thread_pool_handle create(thread_pool::params p);
+    void do_run(std::future<void>* completion, std::function<void(task_context)> task, int concurrency, bool join);
 
 public:
     explicit thread_pool(params const& p)
-        : thread_pool(check_params(p), { })
+        : handle_(create(check_params(p)))
     {
     }
-    ~thread_pool(void);
 
-    thread_pool(thread_pool&& rhs) noexcept;
-    thread_pool& operator =(thread_pool&& rhs) noexcept;
+    thread_pool(thread_pool&&) noexcept = default;
+    thread_pool& operator =(thread_pool&&) noexcept = default;
 
     thread_pool(thread_pool const&) = delete;
-    thread_pool& operator =(thread_pool const&&) = delete;
+    thread_pool& operator =(thread_pool const&) = delete;
 
         //ᅟ
         // The number of concurrent threads.
         //
-    gsl_NODISCARD int num_threads(void) const { return impl_->numThreads_; }
+    gsl_NODISCARD int num_threads(void) const { return handle_->numThreads_; }
 
         //ᅟ
         // Runs the given action on as many threads as indicated by `concurrency`, and waits until all tasks have run to completion.
@@ -168,7 +165,7 @@ public:
     void run(std::function<void(task_context)> action, int concurrency = 0) &
     {
         Expects(action);
-        Expects(concurrency >= 0 && concurrency <= impl_->numThreads_);
+        Expects(concurrency >= 0 && concurrency <= handle_->numThreads_);
 
         do_run(nullptr, std::move(action), concurrency, false);
     }
@@ -182,7 +179,7 @@ public:
     void run(std::function<void(task_context)> action, int concurrency = 0) &&
     {
         Expects(action);
-        Expects(concurrency >= 0 && concurrency <= impl_->numThreads_);
+        Expects(concurrency >= 0 && concurrency <= handle_->numThreads_);
 
         do_run(nullptr, std::move(action), concurrency, true);
     }
@@ -197,7 +194,7 @@ public:
     gsl_NODISCARD std::future<void> run_async(std::function<void(task_context)> action, int concurrency = 0) &
     {
         Expects(action);
-        Expects(concurrency >= 0 && concurrency <= impl_->numThreads_);
+        Expects(concurrency >= 0 && concurrency <= handle_->numThreads_);
 
         std::future<void> result;
         do_run(&result, std::move(action), concurrency, false);
@@ -214,16 +211,13 @@ public:
     gsl_NODISCARD std::future<void> run_async(std::function<void(task_context)> action, int concurrency = 0) &&
     {
         Expects(action);
-        Expects(concurrency >= 0 && concurrency <= impl_->numThreads_);
+        Expects(concurrency >= 0 && concurrency <= handle_->numThreads_);
 
         std::future<void> result;
         do_run(&result, std::move(action), concurrency, true);
         return result;
     }
 };
-
-
-// TODO: implement thread_pool, fork(), and fork_join()
 
 
 } // sysmakeshift

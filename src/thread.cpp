@@ -66,7 +66,7 @@ void win32Assert(BOOL success)
 {
     if (!success)
     {
-        win32Check(GetLastError());
+        win32Check(::GetLastError());
     }
 }
 #endif // _WIN32
@@ -102,7 +102,7 @@ void setThreadNameViaException(DWORD dwThreadId, const char* threadName)
 # pragma warning(disable: 6322) // C6322: empty __except block
     __try
     {
-        RaiseException(MS_VC_EXCEPTION, 0, sizeof info / sizeof(ULONG_PTR), (ULONG_PTR*) &info);
+        ::RaiseException(MS_VC_EXCEPTION, 0, sizeof info / sizeof(ULONG_PTR), (ULONG_PTR*) &info);
     }
     __except (EXCEPTION_EXECUTE_HANDLER)
     {
@@ -110,20 +110,20 @@ void setThreadNameViaException(DWORD dwThreadId, const char* threadName)
 #pragma warning(pop)
 }
 
-using SetThreadDescriptionType = HRESULT(HANDLE hThread, PCWSTR lpThreadDescription);
+typedef HRESULT SetThreadDescriptionType(HANDLE hThread, PCWSTR lpThreadDescription);
 
 void setCurrentThreadDescription(const wchar_t* threadDescription)
 {
     static SetThreadDescriptionType* const setThreadDescription = []
     {
-        HMODULE hKernel32 = GetModuleHandleW(L"kernel32.dll");
+        HMODULE hKernel32 = ::GetModuleHandleW(L"kernel32.dll");
         Expects(hKernel32 != NULL);
-        return (SetThreadDescriptionType*) GetProcAddress(hKernel32, "SetThreadDescriptionType"); // available since Windows 10 1607 or Windows Server 2016
+        return (SetThreadDescriptionType*) ::GetProcAddress(hKernel32, "SetThreadDescriptionType"); // available since Windows 10 1607 or Windows Server 2016
     }();
 
     if (setThreadDescription != nullptr)
     {
-        setThreadDescription(GetCurrentThread(), threadDescription);
+        setThreadDescription(::GetCurrentThread(), threadDescription);
     }
     else
     {
@@ -133,7 +133,7 @@ void setCurrentThreadDescription(const wchar_t* threadDescription)
         {
             narrowDesc[i] = gsl::narrow_cast<char>(threadDescription[i]);
         }
-        setThreadNameViaException(DWORD(-1), narrowDesc.c_str());
+        detail::setThreadNameViaException(DWORD(-1), narrowDesc.c_str());
     }
 }
 
@@ -192,7 +192,7 @@ static void setThreadAffinity(std::thread::native_handle_type handle, std::size_
 # else // _WIN32
     cpu_set cpuSet;
     cpuSet.setCpuFlag(coreIdx);
-    posixCheck(pthread_setaffinity_np((pthread_t) handle, cpuSet.size(), cpuSet.data()));
+    posixCheck(::pthread_setaffinity_np((pthread_t) handle, cpuSet.size(), cpuSet.data()));
 # endif // _WIN32
 }
 #endif // _WIN32
@@ -202,7 +202,7 @@ static void setThreadAttrAffinity(pthread_attr_t& attr, std::size_t coreIdx)
 {
     cpu_set cpuSet;
     cpuSet.setCpuFlag(coreIdx);
-    posixCheck(pthread_attr_setaffinity_np(&attr, cpuSet.size(), cpuSet.data()));
+    posixCheck(::pthread_attr_setaffinity_np(&attr, cpuSet.size(), cpuSet.data()));
 }
 #endif // _WIN32
 
@@ -212,7 +212,7 @@ struct win32_handle_deleter
 {
     void operator ()(HANDLE handle) const noexcept
     {
-        CloseHandle(handle);
+        ::CloseHandle(handle);
     }
 };
 using win32_handle = std::unique_ptr<std::remove_pointer_t<HANDLE>, win32_handle_deleter>;
@@ -256,7 +256,7 @@ public:
     {
         if (handle_ != pthread_t{ })
         {
-            pthread_detach(handle_);
+            ::pthread_detach(handle_);
         }
     }
 };
@@ -267,11 +267,11 @@ struct PThreadAttr
 
     PThreadAttr(void)
     {
-        posixCheck(pthread_attr_init(&attr));
+        posixCheck(::pthread_attr_init(&attr));
     }
     ~PThreadAttr(void)
     {
-        posixCheck(pthread_attr_destroy(&attr));
+        posixCheck(::pthread_attr_destroy(&attr));
     }
 };
 #else
@@ -279,121 +279,9 @@ struct PThreadAttr
 #endif // _WIN32
 
 
-
-
-/*static std::atomic<unsigned> forkJoinCallCounter{ };
-
-void forkJoinImpl(std::function<void(ForkJoinTaskParams taskParams)> action, const ForkJoinParams& params)
-{
-    int hardwareConcurrency = int(std::thread::hardware_concurrency());
-    int numThreads = p.numThreads;
-    if (numThreads == 0)
-    {
-        numThreads = hardwareConcurrency;
-    }
-
-    int maxNumHardwareThreads = p.maxNumHardwareThreads;
-    if (maxNumHardwareThreads == 0)
-    {
-        maxNumHardwareThreads = !p.hardware_thread_mappings.empty()
-            ? int(p.hardware_thread_mappings.size())
-            : hardwareConcurrency;
-    }
-
-    auto hardwareThreadId = [maxNumHardwareThreads, &params](int threadIdx)
-    {
-        auto subidx = threadIdx % maxNumHardwareThreads;
-        return !p.hardware_thread_mappings.empty()
-            ? p.hardware_thread_mappings[subidx]
-            : subidx;
-    };
-
-    if (numThreads == 1 && !p.pin_to_hardware_threads)
-    {
-            // Avoid launching any threads at all if only one non-pinned thread is requested, and execute the action synchronously.
-        action(ForkJoinTaskParams{ 0, 1 });
-        return;
-    }
-
-        // allocate call id
-    int callId = gsl::narrow_cast<int>(forkJoinCallCounter++);
-
-        // allocate thread data
-    auto threadFunctors = std::vector<asc::stencilgen::detail::ThreadFunctor>{ };
-    threadFunctors.reserve(numThreads);
-    for (int i = 0; i < numThreads; ++i)
-    {
-        threadFunctors.emplace_back(asc::stencilgen::detail::ThreadFunctor{ action, callId, i, numThreads });
-    }
-
 #ifdef _WIN32
-        // Create threads (if core affinity is desired, create them suspended, then set the affinity).
-    std::vector<asc::stencilgen::detail::win32_handle> threadHandles;
-    threadHandles.reserve(numThreads);
-    DWORD threadCreationFlags = p.pin_to_hardware_threads ? CREATE_SUSPENDED : 0;
-    for (int i = 0; i < numThreads; ++i)
-    {
-        auto handle = asc::stencilgen::detail::win32_handle(
-            (HANDLE) _beginthreadex(NULL, 0, asc::stencilgen::detail::threadFunc, &threadFunctors[i], threadCreationFlags, nullptr));
-        asc::stencilgen::detail::win32Assert(handle.handle() != nullptr);
-        if (p.pin_to_hardware_threads)
-        {
-            asc::stencilgen::detail::setThreadAffinity(handle.handle(), std::size_t(hardwareThreadId(i)));
-        }
-        threadHandles.push_back(std::move(handle));
-    }
-
-        // Launch threads if we created them in suspended state.
-    if (p.pin_to_hardware_threads)
-    {
-        for (int i = 0; i < numThreads; ++i)
-        {
-            DWORD result = ResumeThread(threadHandles[i].handle());
-            asc::stencilgen::detail::win32Assert(result != (DWORD) -1);
-        }
-    }
-    
-        // Join threads.
-    for (int i = 0; i < numThreads; )
-    {
-            // Join as many threads as possible in a single syscall. It is possible that this can be improved with a tree-like wait chain.
-        HANDLE handles[MAXIMUM_WAIT_OBJECTS];
-        int n = std::min(numThreads - i, MAXIMUM_WAIT_OBJECTS);
-        for (int j = 0; j < n; ++j)
-        {
-            handles[j] = threadHandles[i + j].handle();
-        }
-        DWORD result = WaitForMultipleObjects(n, handles, TRUE, INFINITE);
-        asc::stencilgen::detail::win32Assert(result != WAIT_FAILED);
-        i += n;
-    }
-#else // ^^^ _WIN32 ^^^ / vvv !_WIN32 vvv
-        // Create threads (with core affinity if desired).
-    std::vector<asc::stencilgen::detail::pthread_handle> threadHandles;
-    threadHandles.reserve(numThreads);
-    for (int i = 0; i < numThreads; ++i)
-    {
-        PThreadAttr attr;
-        if (p.pin_to_hardware_threads)
-        {
-            asc::stencilgen::detail::setThreadAttrAffinity(attr.attr, std::size_t(hardwareThreadId(i)));
-        }
-        auto handle = pthread_t{ };
-        asc::stencilgen::detail::posixCheck(pthread_create(&handle, &attr.attr, asc::stencilgen::detail::threadFunc, &threadFunctors[i]));
-        threadHandles.push_back(asc::stencilgen::detail::pthread_handle(handle));
-    }
-
-        // Join threads. It is possible that this can be improved with a tree-like wait chain.
-    for (int i = 0; i < numThreads; ++i)
-    {
-        asc::stencilgen::detail::posixCheck(pthread_join(threadHandles[i].handle(), NULL));
-        threadHandles[i].release();
-    }
-#endif // _WIN32
-}*/
-
-
 static std::atomic<unsigned> threadPoolCounter{ };
+#endif // _WIN32
 
 
 class barrier
@@ -468,6 +356,7 @@ struct thread_pool_thread_data
 
 struct thread_pool_impl : thread_pool_impl_base
 {
+private:
 #if defined(_WIN32)
     std::unique_ptr<detail::win32_handle[]> handles_;
 #elif defined(__linux__)
@@ -478,35 +367,188 @@ struct thread_pool_impl : thread_pool_impl_base
 
     std::promise<std::optional<thread_pool_job>> nextJob_;
     aligned_buffer<thread_pool_thread_data, alignment::cache_line> data_;
+#ifdef _WIN32
     unsigned threadPoolId_; // for runtime thread identification during debugging
+#endif // _WIN32
     bool running_;
-    std::unique_ptr<detail::win32_handle[]> handles_;
+#ifndef _WIN32
+    bool needLaunch_;
+    bool pinToHardwareThreads_;
+    int maxNumHardwareThreads_;
+    std::vector<int> hardwareThreadMappings_;
+#endif // !_WIN32
 
+    static std::size_t getHardwareThreadId(int threadIdx, int maxNumHardwareThreads, gsl::span<int const> hardwareThreadMappings)
+    {
+        auto subidx = threadIdx % maxNumHardwareThreads;
+        return gsl::narrow_cast<std::size_t>(
+            !hardwareThreadMappings.empty() ? hardwareThreadMappings[subidx]
+          : subidx);
+    }
+
+    void join_threads_and_free(void) noexcept // We cannot really handle join failure.
+    {
+        auto self = std::unique_ptr<thread_pool_impl>(this);
+        
+#ifdef _WIN32
+            // Join threads.
+        for (int i = 0; i < numThreads_; )
+        {
+                // Join as many threads as possible in a single syscall. It is possible that this can be improved with a tree-like wait chain.
+            HANDLE lhandles[MAXIMUM_WAIT_OBJECTS];
+            int n = std::min(numThreads_ - i, MAXIMUM_WAIT_OBJECTS);
+            for (int j = 0; j < n; ++j)
+            {
+                lhandles[j] = handles_[i + j].get();
+            }
+            DWORD result = ::WaitForMultipleObjects(n, lhandles, TRUE, INFINITE);
+            detail::win32Assert(result != WAIT_FAILED);
+            i += n;
+        }
+#else // ^^^ _WIN32 ^^^ / vvv !_WIN32 vvv
+            // Join threads. It is possible that this can be improved with a tree-like wait chain.
+        for (int i = 0; i < numThreads_; ++i)
+        {
+            detail::posixCheck(::pthread_join(threadHandles[i].handle(), NULL));
+            threadHandles[i].release();
+        }
+#endif // _WIN32
+    }
+
+    void schedule_termination(std::future<void>* completion) noexcept // We cannot really handle `bad_alloc` here.
+    {
+        nextJob_.set_value(std::nullopt);
+        if (completion != nullptr)
+        {
+            *completion = std::async(std::launch::deferred, &thread_pool_impl::join_threads_and_free, this);
+        }
+    }
+
+public:
     thread_pool_impl(thread_pool::params const& p)
         : thread_pool_impl_base{ p.num_threads },
           nextJob_{ },
           data_(gsl::narrow_cast<std::size_t>(p.num_threads), std::in_place, *this, nextJob_.get_future().share()),
+#ifdef _WIN32
           threadPoolId_(threadPoolCounter++),
+#endif // _WIN32
           running_(false)
     {
-        //handles_.reserve(gsl::narrow_cast<std::size_t>(p.num_threads));
+        for (int i = 0; i < p.num_threads; ++i)
+        {
+            data_[i].threadIdx_ = i;
+        }
 
 #ifdef _WIN32
-        // Create threads (if core affinity is desired, create them suspended, then set the affinity).
-    std::vector<asc::stencilgen::detail::win32_handle> threadHandles;
-    threadHandles.reserve(numThreads);
-    DWORD threadCreationFlags = p.pin_to_hardware_threads ? CREATE_SUSPENDED : 0;
-    for (int i = 0; i < numThreads; ++i)
-    {
-        auto handle = asc::stencilgen::detail::win32_handle(
-            (HANDLE) _beginthreadex(NULL, 0, asc::stencilgen::detail::threadFunc, &threadFunctors[i], threadCreationFlags, nullptr));
-        asc::stencilgen::detail::win32Assert(handle.handle() != nullptr);
-        if (p.pin_to_hardware_threads)
+            // Create threads suspended; set core affinity if desired.
+        handles_ = std::make_unique<detail::win32_handle[]>(gsl::narrow_cast<std::size_t>(p.num_threads));
+        DWORD threadCreationFlags = p.pin_to_hardware_threads ? CREATE_SUSPENDED : 0;
+        for (int i = 0; i < p.num_threads; ++i)
         {
-            asc::stencilgen::detail::setThreadAffinity(handle.handle(), std::size_t(hardwareThreadId(i)));
+            auto handle = detail::win32_handle(
+                (HANDLE) ::_beginthreadex(NULL, 0, &thread_pool_thread_data::threadFunc, &data_[i], threadCreationFlags, nullptr));
+            detail::win32Assert(handle != nullptr);
+            if (p.pin_to_hardware_threads)
+            {
+                detail::setThreadAffinity(handle.get(), getHardwareThreadId(i, p.max_num_hardware_threads, p.hardware_thread_mappings));
+            }
+            handles_[i] = std::move(handle);
         }
-        threadHandles.push_back(std::move(handle));
+#else // ^^^ _WIN32 ^^^ / vvv !_WIN32 vvv
+            // Store hardware thread mappings for delayed thread creation.
+        handles_ = std::make_unique<detail::pthread_handle[]>(gsl::narrow_cast<std::size_t>(p.num_threads));
+        needLaunch_ = false;
+        pinToHardwareThreads_ = p.pin_to_hardware_threads;
+        maxNumHardwareThreads_ = p.max_num_hardware_threads;
+        hardwareThreadMappings_.assign(p.hardware_thread_mappings.begin(), p.hardware_thread_mappings.end());
+#endif // _WIN32
     }
+
+#ifdef _WIN32
+    unsigned thread_pool_id(void) const noexcept { return threadPoolId_; }
+#endif // _WIN32
+
+    void launch_threads(void) noexcept // We cannot really handle thread launch/resume failure.
+    {
+        if (running_) return;
+        running_ = true;
+
+#ifdef _WIN32
+            // Resume threads.
+        for (int i = 0; i < numThreads_; ++i)
+        {
+            DWORD result = ::ResumeThread(handles_[i].get());
+            detail::win32Assert(result != DWORD(-1));
+        }
+#else // ^^^ _WIN32 ^^^ / vvv !_WIN32 vvv
+            // Create threads; set core affinity if desired.
+        for (int i = 0; i < numThreads_; ++i)
+        {
+            PThreadAttr attr;
+            if (pinToHardwareThreads_)
+            {
+                detail::setThreadAttrAffinity(attr.attr, getHardwareThreadId(i, maxNumHardwareThreads_, hardwareThreadMappings_));
+            }
+            auto handle = pthread_t{ };
+            detail::posixCheck(::pthread_create(&handle, &attr.attr, &thread_pool_thread_data::threadFunc, &data[i]));
+            handles_[i] = pthread_handle(handle);
+        }
+
+            // Release thread mapping data.
+        hardwareThreadMappings_ = { };
+#endif // _WIN32
+    }
+
+    void schedule_job(std::future<void>* completion, std::function<void(thread_pool::task_context)> action, int concurrency) noexcept // We cannot really failure in future chaining.
+    {
+        auto completionPromise = std::optional<std::promise<void>>{ };
+        if (completion != nullptr)
+        {
+            completionPromise = std::promise<void>{ };
+            *completion = completionPromise->get_future();
+        }
+        auto nextJobPromise = std::promise<std::optional<thread_pool_job>>{ };
+        auto nextJobFuture = nextJobPromise.get_future();
+        nextJob_.set_value(thread_pool_job{ std::move(action), std::move(completionPromise), concurrency, nextJobPromise.get_future().share() });
+        nextJob_ = std::move(nextJobPromise);
+#ifndef _WIN32
+        needLaunch_ = true;
+#endif // !_WIN32
+    }
+
+    void close_and_free(std::future<void>* completion)
+    {
+#ifdef _WIN32
+        schedule_termination(completion);
+        launch_threads(); // The only clean way to quit never-resumed threads on Windows is to resume them and let them run to the end.
+        if (completion == nullptr)
+        {
+            join_threads_and_free();
+        }
+#else // ^^^ _WIN32 ^^^ / vvv !_WIN32 vvv
+        if (needLaunch_ || running_)
+        {
+            schedule_termination(completion);
+            if (needLaunch_)
+            {
+                launch_threads();
+            }
+            if (completion == nullptr)
+            {
+                join_threads_and_free();
+            }
+        }
+        else // Threads were never launched, so we just quit and succeed immediately.
+        {
+            delete this;
+            if (completion != nullptr)
+            {
+                auto completionPromise = std::promise<void>{ };
+                completionPromise.set_value();
+                *completion = completionPromise.get_future();
+            }
+        }
+#endif // _WIN32
     }
 };
 
@@ -550,7 +592,7 @@ unsigned __stdcall thread_pool_thread_data::threadFunc(void* data)
     {
         wchar_t buf[64];
         std::swprintf(buf, sizeof buf / sizeof(wchar_t), L"sysmakeshift thread pool #%d, thread %d",
-            self.impl_.threadPoolId_, self.threadIdx_);
+            self.impl_.thread_pool_id(), self.threadIdx_);
         detail::setCurrentThreadDescription(buf);
     }
     self();
@@ -566,7 +608,16 @@ void* thread_pool_thread_data::threadFunc(void* data)
 #endif // _WIN32
 
 
-static gsl::not_null<std::unique_ptr<detail::thread_pool_impl_base>> create_thread_pool(thread_pool::params p)
+void thread_pool_impl_deleter::operator ()(thread_pool_impl_base* impl)
+{
+    static_cast<detail::thread_pool_impl*>(impl)->close_and_free(nullptr);
+}
+
+
+} // namespace detail
+
+
+detail::thread_pool_handle thread_pool::create(thread_pool::params p)
 {
         // Replace placeholder arguments with appropriate default values.
     int hardwareConcurrency = gsl::narrow_cast<int>(std::thread::hardware_concurrency());
@@ -582,139 +633,23 @@ static gsl::not_null<std::unique_ptr<detail::thread_pool_impl_base>> create_thre
     }
     p.max_num_hardware_threads = std::max(p.max_num_hardware_threads, hardwareConcurrency);
 
-    return gsl::not_null(std::make_unique<detail::thread_pool_impl>(p));
+    return detail::thread_pool_handle(new detail::thread_pool_impl(p));
 }
 
-
-} // namespace detail
-
-
-thread_pool::thread_pool(params const& p, internal_)
-    : impl_(detail::create_thread_pool(p))
+void thread_pool::do_run(std::future<void>* completion, std::function<void(task_context)> action, int concurrency, bool join)
 {
-}
-
-
-thread_pool::impl thread_pool::acquire(params const& p)
-{
-    int hardwareConcurrency = int(std::thread::hardware_concurrency());
-    int numThreads = p.num_threads;
-    if (numThreads == 0)
+    auto& impl = static_cast<detail::thread_pool_impl&>(*handle_.get());
+    impl.schedule_job(join ? nullptr : completion, std::move(action), concurrency);
+    if (join)
     {
-        numThreads = hardwareConcurrency;
+        auto lhandle = detail::thread_pool_handle(std::move(handle_));
+        lhandle.release();
+        impl.close_and_free(completion);
     }
-
-    int maxNumHardwareThreads = p.max_num_hardware_threads;
-    if (maxNumHardwareThreads == 0)
+    else
     {
-        maxNumHardwareThreads = !p.hardware_thread_mappings.empty()
-            ? int(p.hardware_thread_mappings.size())
-            : hardwareConcurrency;
+        impl.launch_threads();
     }
-
-    auto hardwareThreadId = [maxNumHardwareThreads, &p](int threadIdx)
-    {
-        auto subidx = threadIdx % maxNumHardwareThreads;
-        return !p.hardware_thread_mappings.empty()
-            ? p.hardware_thread_mappings[subidx]
-            : subidx;
-    };
-
-        // allocate thread pool id
-    int threadPoolId = gsl::narrow_cast<int>(detail::threadPoolCounter++);
-
-        // allocate thread data
-    auto threadFunctors = std::vector<asc::stencilgen::detail::ThreadFunctor>{ };
-    threadFunctors.reserve(numThreads);
-    for (int i = 0; i < numThreads; ++i)
-    {
-        threadFunctors.emplace_back(asc::stencilgen::detail::ThreadFunctor{ action, callId, i, numThreads });
-    }
-
-#ifdef _WIN32
-        // Create threads (if core affinity is desired, create them suspended, then set the affinity).
-    std::vector<asc::stencilgen::detail::win32_handle> threadHandles;
-    threadHandles.reserve(numThreads);
-    DWORD threadCreationFlags = p.pin_to_hardware_threads ? CREATE_SUSPENDED : 0;
-    for (int i = 0; i < numThreads; ++i)
-    {
-        auto handle = asc::stencilgen::detail::win32_handle(
-            (HANDLE) _beginthreadex(NULL, 0, asc::stencilgen::detail::threadFunc, &threadFunctors[i], threadCreationFlags, nullptr));
-        asc::stencilgen::detail::win32Assert(handle.handle() != nullptr);
-        if (p.pin_to_hardware_threads)
-        {
-            asc::stencilgen::detail::setThreadAffinity(handle.handle(), std::size_t(hardwareThreadId(i)));
-        }
-        threadHandles.push_back(std::move(handle));
-    }
-
-        // Launch threads if we created them in suspended state.
-    if (p.pin_to_hardware_threads)
-    {
-        for (int i = 0; i < numThreads; ++i)
-        {
-            DWORD result = ResumeThread(threadHandles[i].handle());
-            asc::stencilgen::detail::win32Assert(result != (DWORD) -1);
-        }
-    }
-    
-        // Join threads.
-    for (int i = 0; i < numThreads; )
-    {
-            // Join as many threads as possible in a single syscall. It is possible that this can be improved with a tree-like wait chain.
-        HANDLE handles[MAXIMUM_WAIT_OBJECTS];
-        int n = std::min(numThreads - i, MAXIMUM_WAIT_OBJECTS);
-        for (int j = 0; j < n; ++j)
-        {
-            handles[j] = threadHandles[i + j].handle();
-        }
-        DWORD result = WaitForMultipleObjects(n, handles, TRUE, INFINITE);
-        asc::stencilgen::detail::win32Assert(result != WAIT_FAILED);
-        i += n;
-    }
-#else // ^^^ _WIN32 ^^^ / vvv !_WIN32 vvv
-        // Create threads (with core affinity if desired).
-    std::vector<asc::stencilgen::detail::pthread_handle> threadHandles;
-    threadHandles.reserve(numThreads);
-    for (int i = 0; i < numThreads; ++i)
-    {
-        PThreadAttr attr;
-        if (p.pin_to_hardware_threads)
-        {
-            asc::stencilgen::detail::setThreadAttrAffinity(attr.attr, std::size_t(hardwareThreadId(i)));
-        }
-        auto handle = pthread_t{ };
-        asc::stencilgen::detail::posixCheck(pthread_create(&handle, &attr.attr, asc::stencilgen::detail::threadFunc, &threadFunctors[i]));
-        threadHandles.push_back(asc::stencilgen::detail::pthread_handle(handle));
-    }
-
-        // Join threads. It is possible that this can be improved with a tree-like wait chain.
-    for (int i = 0; i < numThreads; ++i)
-    {
-        asc::stencilgen::detail::posixCheck(pthread_join(threadHandles[i].handle(), NULL));
-        threadHandles[i].release();
-    }
-#endif // _WIN32
-}
-
-thread_pool::thread_pool(params const& p, internal_)
-    : impl_(acquire(p))
-{
-}
-
-thread_pool::~thread_pool(void)
-{
-}
-
-thread_pool::thread_pool(thread_pool&& rhs) noexcept
-    : impl_(std::move(rhs.impl_))
-{
-}
-
-thread_pool& thread_pool::operator =(thread_pool&& rhs) noexcept
-{
-    impl_ = std::move(rhs.impl_);
-    return *this;
 }
 
 
