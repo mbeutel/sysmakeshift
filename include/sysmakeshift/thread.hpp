@@ -4,41 +4,221 @@
 
 
 #include <thread>
-#include <utility> // for forward<>()
+#include <future>
+#include <utility>    // for move(), forward<>()
+#include <memory>     // for unique_ptr<>
+#include <functional> // for function<>
+
+#include <gsl/gsl-lite.hpp> // for span<>, not_null<>, ssize(), gsl_NODISCARD
+
+#include <sysmakeshift/detail/thread.hpp>
 
 
 namespace sysmakeshift
 {
 
 
+    //ᅟ
     // Like `std::thread`, but automatically joins the thread upon destruction.
-    // Superseded by `std::jthread` in C++20.
-class joining_thread
+    // Superseded by `std::jthread` in C++20, which also supports interruption with `std::stop_token`.
+    //
+class jthread : private std::thread
 {
 private:
     std::thread thread_;
 
 public:
+    using id = std::thread::id;
+    using std::thread::detach;
+    using std::thread::get_id;
+    using std::thread::hardware_concurrency;
+    using std::thread::join;
+    using std::thread::joinable;
+    using std::thread::native_handle;
+
     template <typename F, typename... Ts>
-    joining_thread(F&& func, Ts&&... args)
+    jthread(F&& func, Ts&&... args)
         : thread_(std::forward<F>(func), std::forward<Ts>(args)...)
     {
     }
 
-    joining_thread(joining_thread&&) noexcept = default;
-    joining_thread& operator =(joining_thread&&) noexcept = default;
+    jthread(jthread&&) noexcept = default;
+    jthread& operator =(jthread&&) noexcept = default;
 
-    void join(void)
-    {
-        thread_.join();
-    }
+    jthread(jthread const&) noexcept = delete;
+    jthread& operator =(jthread const&) noexcept = delete;
 
-    ~joining_thread(void)
+    ~jthread(void)
     {
         if (thread_.joinable())
         {
             thread_.join();
         }
+    }
+};
+
+
+    //ᅟ
+    // Simple thread pool with support for thread core affinity.
+    //
+class thread_pool
+{
+    struct internal_ { };
+
+public:
+        //ᅟ
+        // Thread pool parameters.
+        //
+    struct params
+    {
+            //ᅟ
+            // How many threads to fork. A value of 0 indicates "as many as hardware threads are available".
+            //
+        int num_threads = 0;
+
+            //ᅟ
+            // Maximal number of hardware threads to pin threads to. A value of 0 indicates "as many as possible".
+            // If `max_num_hardware_threads` is 0 and `hardware_thread_mappings` is non-empty, `hardware_thread_mappings.size()` is taken as the
+            // maximal number of hardware threads to pin threads to.
+            // If `hardware_thread_mappings` is not empty, `max_num_hardware_threads` may not be larger than `hardware_thread_mappings.size()`.
+            // Can be useful to increase reproducibility of synchronization and data race bugs by running multiple threads on the same core.
+            //
+        int max_num_hardware_threads = 0;
+
+            //ᅟ
+            // Controls whether threads are pinned to hardware threads, i.e. whether threads have a core affinity. Helps maintain data locality.
+            //
+        bool pin_to_hardware_threads = true;
+
+            //ᅟ
+            // Maps thread indices to hardware thread ids. If empty, the thread pool uses thread indices as hardware thread ids.
+            // If non-empty and if `max_num_hardware_threads == 0`, `hardware_thread_mappings.size()` is taken as the maximal number of hardware
+            // threads to pin threads to.
+            //
+        gsl::span<int const> hardware_thread_mappings = { };
+    };
+
+        //ᅟ
+        // State passed to tasks that are executed in thread pool.
+        //
+    class task_context
+    {
+        friend detail::thread_pool_thread_data;
+
+    private:
+        detail::thread_pool_impl_base& impl_;
+        int threadIdx_;
+
+        explicit task_context(detail::thread_pool_impl_base& _impl, int _threadIdx) noexcept
+            : impl_(_impl), threadIdx_(_threadIdx)
+        {
+        }
+
+    public:
+            //ᅟ
+            // The current thread index.
+            //
+        gsl_NODISCARD int thread_index(void) const noexcept { return threadIdx_; }
+
+            //ᅟ
+            // The number of concurrent threads.
+            //
+        gsl_NODISCARD int num_threads(void) const noexcept { return impl_.numThreads_; }
+    };
+
+private:
+    gsl::not_null<std::unique_ptr<detail::thread_pool_impl_base>> impl_;
+
+    thread_pool(params const& p, internal_);
+
+    static params const& check_params(params const& p)
+    {
+        Expects(p.num_threads >= 0);
+        Expects(p.max_num_hardware_threads >= 0 && (p.num_threads == 0 || p.max_num_hardware_threads <= p.num_threads));
+        Expects(p.hardware_thread_mappings.empty() || p.max_num_hardware_threads <= gsl::std20::ssize(p.hardware_thread_mappings));
+        return p;
+    }
+
+    void do_run(std::future<void>* future, std::function<void(task_context)> task, int concurrency, bool join);
+
+public:
+    explicit thread_pool(params const& p)
+        : thread_pool(check_params(p), { })
+    {
+    }
+    ~thread_pool(void);
+
+    thread_pool(thread_pool&& rhs) noexcept;
+    thread_pool& operator =(thread_pool&& rhs) noexcept;
+
+    thread_pool(thread_pool const&) = delete;
+    thread_pool& operator =(thread_pool const&&) = delete;
+
+        //ᅟ
+        // The number of concurrent threads.
+        //
+    gsl_NODISCARD int num_threads(void) const { return impl_->numThreads_; }
+
+        //ᅟ
+        // Runs the given action on as many threads as indicated by `concurrency`, and waits until all tasks have run to completion.
+        //ᅟ
+        // `concurrency == 0` indicates that the maximum concurrency level should be used, i.e. the task is run on all threads in the thread pool.
+        // `concurrency` may not exceed the number of threads in the thread pool.
+        //
+    void run(std::function<void(task_context)> action, int concurrency = 0) &
+    {
+        Expects(action);
+        Expects(concurrency >= 0 && concurrency <= impl_->numThreads_);
+
+        do_run(nullptr, std::move(action), concurrency, false);
+    }
+
+        //ᅟ
+        // Runs the given action on as many threads as indicated by `concurrency`, and waits until all tasks have run to completion.
+        //ᅟ
+        // `concurrency == 0` indicates that the maximum concurrency level should be used, i.e. the task is run on all threads in the thread pool.
+        // `concurrency` may not exceed the number of threads in the thread pool.
+        //
+    void run(std::function<void(task_context)> action, int concurrency = 0) &&
+    {
+        Expects(action);
+        Expects(concurrency >= 0 && concurrency <= impl_->numThreads_);
+
+        do_run(nullptr, std::move(action), concurrency, true);
+    }
+
+        //ᅟ
+        // Runs the given action on as many threads as indicated by `concurrency`, and returns a `std::future<void>` which
+        // represents the completion state of the tasks.
+        //ᅟ
+        // `concurrency == 0` indicates that the maximum concurrency level should be used, i.e. the task is run on all threads in the thread pool.
+        // `concurrency` may not exceed the number of threads in the thread pool.
+        //
+    gsl_NODISCARD std::future<void> run_async(std::function<void(task_context)> action, int concurrency = 0) &
+    {
+        Expects(action);
+        Expects(concurrency >= 0 && concurrency <= impl_->numThreads_);
+
+        std::future<void> result;
+        do_run(&result, std::move(action), concurrency, false);
+        return result;
+    }
+
+        //ᅟ
+        // Runs the given action on as many threads as indicated by `concurrency`, and returns a `std::future<void>` which
+        // represents the completion state of the tasks.
+        //ᅟ
+        // `concurrency == 0` indicates that the maximum concurrency level should be used, i.e. the task is run on all threads in the thread pool.
+        // `concurrency` may not exceed the number of threads in the thread pool.
+        //
+    gsl_NODISCARD std::future<void> run_async(std::function<void(task_context)> action, int concurrency = 0) &&
+    {
+        Expects(action);
+        Expects(concurrency >= 0 && concurrency <= impl_->numThreads_);
+
+        std::future<void> result;
+        do_run(&result, std::move(action), concurrency, true);
+        return result;
     }
 };
 

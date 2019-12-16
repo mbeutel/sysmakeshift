@@ -14,7 +14,8 @@ find_package(gsl-lite 0.35.3 REQUIRED)
 add_library(sysmakeshift STATIC
     "fenv.cpp"
     "memory.cpp"
-    "new.cpp")
+    "new.cpp"
+    "thread.cpp")
 
 # library properties
 target_include_directories(sysmakeshift
