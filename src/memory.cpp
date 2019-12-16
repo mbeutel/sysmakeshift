@@ -1,6 +1,7 @@
 
 #include <new>
-#include <cstddef> // for size_t, align_val_t
+#include <cstddef>   // for size_t, align_val_t
+#include <algorithm> // for max()
 
 #include <sysmakeshift/new.hpp>    // for hardware_large_page_size(), hardware_page_size(), hardware_cache_line_size()
 #include <sysmakeshift/memory.hpp>
@@ -47,16 +48,16 @@ static std::size_t floor_2p(std::size_t x)
 
 std::size_t alignment_in_bytes(alignment a) noexcept
 {
-    if ((a & alignment::large_page) != alignment::none)
+    if ((a & alignment::large_page) != alignment{ })
     {
             // This is without effect if `hardware_large_page_size()` returns 0, i.e. if large pages are not supported.
         a |= alignment(hardware_large_page_size());
     }
-    if ((a & alignment::page) != alignment::none)
+    if ((a & alignment::page) != alignment{ })
     {
         a |= alignment(hardware_page_size());
     }
-    if ((a & alignment::cache_line) != alignment::none)
+    if ((a & alignment::cache_line) != alignment{ })
     {
         a |= alignment(hardware_cache_line_size());
     }
@@ -64,7 +65,7 @@ std::size_t alignment_in_bytes(alignment a) noexcept
         // Mask out flags with special meaning.
     a &= ~(alignment::large_page | alignment::page | alignment::cache_line);
 
-    return floor_2p(std::size_t(a));
+    return std::max(std::size_t(1), floor_2p(std::size_t(a)));
 }
 
 

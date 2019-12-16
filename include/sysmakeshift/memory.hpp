@@ -105,7 +105,7 @@ enum class alignment : std::size_t
     large_page = std::size_t(1) << (sizeof(std::size_t) * 8u - 1u),
     page       = std::size_t(1) << (sizeof(std::size_t) * 8u - 2u),
     cache_line = std::size_t(1) << (sizeof(std::size_t) * 8u - 3u),
-    none = 1
+    none = 0
 };
 SYSMAKESHIFT_DEFINE_ENUM_BITMASK_OPERATORS(alignment)
 
