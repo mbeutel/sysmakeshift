@@ -14,6 +14,8 @@ namespace smk = sysmakeshift;
 
 TEST_CASE("thread_pool can schedule single task")
 {
+    GENERATE(range(0, 20)); // repetitions
+
     int numThreads = GENERATE(0, 1, 3, 10, 50);
     unsigned numActualThreads = static_cast<unsigned>(numThreads);
     if (numActualThreads == 0)
@@ -55,6 +57,8 @@ TEST_CASE("thread_pool can schedule single task")
 
 TEST_CASE("thread_pool can schedule multiple tasks")
 {
+    GENERATE(range(0, 10)); // repetitions
+
     int numThreads = GENERATE(0, 1, 3, 10, 50);
     unsigned numActualThreads = static_cast<unsigned>(numThreads);
     if (numActualThreads == 0)
