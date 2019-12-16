@@ -3,13 +3,16 @@
 #define INCLUDED_SYSMAKESHIFT_BUFFER_HPP_
 
 
-#include <cstddef> // for size_t, ptrdiff_t
-#include <memory>  // for unique_ptr<>, allocator<>
-#include <utility> // for move(), exchange()
+#include <cstddef>  // for size_t, ptrdiff_t
+#include <memory>   // for unique_ptr<>, allocator<>
+#include <utility>  // for move()
+#include <iterator> // for random_access_iterator_tag
 
-#include <gsl/gsl-lite.hpp> // for Expects(), gsl_NODISCARD
+#include <gsl/gsl-lite.hpp> // for Expects(), span<>, gsl_NODISCARD
 
 #include <sysmakeshift/memory.hpp> // for alignment, aligned_allocator<>
+
+#include <sysmakeshift/detail/buffer.hpp>
 
 
 namespace sysmakeshift
@@ -17,16 +20,207 @@ namespace sysmakeshift
 
 
 template <typename T, alignment Alignment, typename A = std::allocator<T>>
-class element_aligned_buffer
+class aligned_buffer
 {
-    // TODO: implement
+    static_assert(!std::is_const<T>::value && !std::is_volatile<T>::value, "buffer element type must not have cv qualifiers");
+    static_assert(!std::is_reference<T>::value, "buffer element type must not be a reference");
+
+public:
+    using allocator_type = aligned_allocator<T, Alignment, A>;
+
+private:
+    std::unique_ptr<char[], detail::aligned_buffer_deleter<T, A>> data_;
+
+public:
+    using value_type = T;
+    using size_type = std::size_t;
+    using difference_type = std::ptrdiff_t;
+    using pointer = T*;
+    using const_pointer = T const*;
+    using reference = T&;
+    using const_reference = T const&;
+
+    using iterator = detail::aligned_buffer_iterator<T>;
+    using const_iterator = detail::aligned_buffer_iterator<T const>;
+
+    explicit aligned_buffer(std::size_t _size)
+        : data_(detail::acquire_aligned_buffer<T, Alignment, allocator_type>(_size, { }))
+    {
+    }
+    explicit aligned_buffer(std::size_t _size, A _allocator)
+        : data_(detail::acquire_aligned_buffer<T, Alignment, allocator_type>(_size, std::move(_allocator)))
+    {
+    }
+
+    gsl_NODISCARD allocator_type get_allocator(void) const noexcept
+    {
+        return data_.get_deleter();
+    }
+
+    gsl_NODISCARD std::size_t size(void) const noexcept
+    {
+        return data_.get_deleter().size_;
+    }
+    gsl_NODISCARD reference operator [](std::size_t i)
+    {
+        Expects(i < data_.get_deleter().size_);
+
+        return &data_.get()[i * data_.get_deleter().bytesPerElement_];
+    }
+    gsl_NODISCARD const_reference operator [](std::size_t i) const
+    {
+        Expects(i < data_.get_deleter().size_);
+
+        return &data_.get()[i * data_.get_deleter().bytesPerElement_];
+    }
+
+    gsl_NODISCARD iterator begin(void) noexcept
+    {
+        return { data_.get(), 0, data_.get_deleter().bytesPerElement_ };
+    }
+    gsl_NODISCARD const_iterator begin(void) const noexcept
+    {
+        return { data_.get(), 0, data_.get_deleter().bytesPerElement_ };
+    }
+    gsl_NODISCARD iterator end(void) noexcept
+    {
+        return { data_.get(), data_.get_deleter().size_, data_.get_deleter().bytesPerElement_ };
+    }
+    gsl_NODISCARD const_iterator end(void) const noexcept
+    {
+        return { data_.get(), data_.get_deleter().size_, data_.get_deleter().bytesPerElement_ };
+    }
+
+    gsl_NODISCARD constexpr bool empty(void) const noexcept
+    {
+        return data_.get_deleter().size_ == 0;
+    }
+
+    gsl_NODISCARD reference front(void)
+    {
+        Expects(!empty());
+        return (*this)[0];
+    }
+    gsl_NODISCARD const_reference front(void) const
+    {
+        Expects(!empty());
+        return (*this)[0];
+    }
+    gsl_NODISCARD reference back(void)
+    {
+        Expects(!empty());
+        return (*this)[size() - 1];
+    }
+    gsl_NODISCARD const_reference back(void) const
+    {
+        Expects(!empty());
+        return (*this)[size() - 1];
+    }
 };
 
 
 template <typename T, alignment Alignment, typename A = std::allocator<T>>
-class row_aligned_buffer
+class aligned_row_buffer
 {
-    // TODO: implement
+    static_assert(!std::is_const<T>::value && !std::is_volatile<T>::value, "buffer element type must not have cv qualifiers");
+    static_assert(!std::is_reference<T>::value, "buffer element type must not be a reference");
+
+private:
+    using allocator_type = aligned_allocator<T, Alignment, A>;
+
+    std::unique_ptr<char[], detail::aligned_row_buffer_deleter<T, A>> data_;
+
+public:
+    using size_type = std::size_t;
+    using difference_type = std::ptrdiff_t;
+    using reference = gsl::span<T>;
+    using const_reference = gsl::span<T const>;
+
+    using iterator = detail::aligned_row_buffer_iterator<T>;
+    using const_iterator = detail::aligned_row_buffer_iterator<T const>;
+
+    explicit aligned_row_buffer(std::size_t _rows, std::size_t _cols)
+        : data_(detail::acquire_aligned_row_buffer<T, Alignment, allocator_type>(_rows, _cols, { }))
+    {
+    }
+    explicit aligned_row_buffer(std::size_t _rows, std::size_t _cols, A _allocator)
+        : data_(detail::acquire_aligned_row_buffer<T, Alignment, allocator_type>(_rows, _cols, std::move(_allocator)))
+    {
+    }
+
+    gsl_NODISCARD allocator_type get_allocator(void) const noexcept
+    {
+        return data_.get_deleter();
+    }
+
+    gsl_NODISCARD std::size_t rows(void) const noexcept
+    {
+        return data_.get_deleter().rows_;
+    }
+    gsl_NODISCARD std::size_t columns(void) const noexcept
+    {
+        return data_.get_deleter().cols_;
+    }
+
+    gsl_NODISCARD std::size_t size(void) const noexcept
+    {
+        return rows();
+    }
+    gsl_NODISCARD gsl::span<T> operator [](std::size_t i)
+    {
+        Expects(i < data_.get_deleter().rows_);
+
+        return { &data_.get()[i * data_.get_deleter().bytesPerRow_], data_.get_deleter().cols_ };
+    }
+    gsl_NODISCARD gsl::span<T const> operator [](std::size_t i) const
+    {
+        Expects(i < data_.get_deleter().rows_);
+
+        return { &data_.get()[i * data_.get_deleter().bytesPerRow_], data_.get_deleter().cols_ };
+    }
+
+    gsl_NODISCARD iterator begin(void) noexcept
+    {
+        return { data_.get(), 0, data_.get_deleter().cols_, data_.get_deleter().bytesPerRow_ };
+    }
+    gsl_NODISCARD const_iterator begin(void) const noexcept
+    {
+        return { data_.get(), 0, data_.get_deleter().cols_, data_.get_deleter().bytesPerRow_ };
+    }
+    gsl_NODISCARD iterator end(void) noexcept
+    {
+        return { data_.get(), data_.get_deleter().size_, data_.get_deleter().cols_, data_.get_deleter().bytesPerRow_ };
+    }
+    gsl_NODISCARD const_iterator end(void) const noexcept
+    {
+        return { data_.get(), data_.get_deleter().size_, data_.get_deleter().cols_, data_.get_deleter().bytesPerRow_ };
+    }
+
+    gsl_NODISCARD constexpr bool empty(void) const noexcept
+    {
+        return data_.get_deleter().rows_ == 0;
+    }
+
+    gsl_NODISCARD reference front(void)
+    {
+        Expects(!empty());
+        return (*this)[0];
+    }
+    gsl_NODISCARD const_reference front(void) const
+    {
+        Expects(!empty());
+        return (*this)[0];
+    }
+    gsl_NODISCARD reference back(void)
+    {
+        Expects(!empty());
+        return (*this)[size() - 1];
+    }
+    gsl_NODISCARD const_reference back(void) const
+    {
+        Expects(!empty());
+        return (*this)[size() - 1];
+    }
 };
 
 

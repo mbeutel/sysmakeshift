@@ -14,6 +14,7 @@ find_package(gsl-lite 0.35.3 REQUIRED)
 # test targets
 add_executable(test-sysmakeshift
     "main.cpp"
+    "test-buffer.cpp"
     "test-fenv.cpp"
     "test-memory.cpp"
     "test-new.cpp"
