@@ -19,7 +19,7 @@ namespace sysmakeshift
 {
 
 
-    //ᅟ
+    //
     // Buffer with aligned elements.
     //ᅟ
     //ᅟ    auto threadData = aligned_buffer<ThreadData, alignment::cache_line>(numThreads);
@@ -149,7 +149,7 @@ public:
 };
 
 
-    //ᅟ
+    //
     // Two-dimensional buffer with aligned rows.
     //ᅟ
     //ᅟ    auto threadData = aligned_buffer<float, alignment::cache_line>(rows, cols);

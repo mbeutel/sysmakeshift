@@ -28,17 +28,17 @@ constexpr std::size_t hardware_destructive_interference_size = 64;
 #endif // defined(_M_IX86) || defined(_M_AMD64) || defined(__i386__) || defined(__x86_64__)
 
 
-    //ᅟ
+    //
     // Reports the operating system's large page size in bytes, or 0 if large pages are not available or not supported.
     //
 std::size_t hardware_large_page_size(void) noexcept;
 
-    //ᅟ
+    //
     // Reports the operating system's page size in bytes.
     //
 std::size_t hardware_page_size(void) noexcept;
 
-    //ᅟ
+    //
     // Reports the CPU architecture's cache line size in bytes.
     //
 std::size_t hardware_cache_line_size(void) noexcept;

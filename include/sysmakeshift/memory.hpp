@@ -23,13 +23,14 @@ namespace sysmakeshift
 {
 
 
-    //ᅟ
+    //
     // Allocator adaptor that interposes construct() calls to convert value initialization into default initialization.
-    // cf. https://stackoverflow.com/a/21028912
     //
 template <typename T, typename A = std::allocator<T>>
 class default_init_allocator : public A
 {
+    // Implementation taken from https://stackoverflow.com/a/21028912.
+
 public:
     using A::A;
 
@@ -53,7 +54,7 @@ public:
 };
 
 
-    //ᅟ
+    //
     // Allocator that always returns zero-initialized memory.
     //
 template <typename T>
@@ -95,8 +96,9 @@ gsl_NODISCARD bool operator !=(zero_init_allocator<T> const& x, zero_init_alloca
 }
 
 
-    //ᅟ
+    //
     // Represents an alignment to use for aligned allocations.
+    //ᅟ
     // In addition to the special values, any positive integer that is a power of 2 may be cast to `alignment`.
     // Multiple alignment requirements can be combined using bitmask operations, e.g. `alignment::cache_line | alignment(alignof(T))`.
     //
@@ -110,7 +112,7 @@ enum class alignment : std::size_t
 SYSMAKESHIFT_DEFINE_ENUM_BITMASK_OPERATORS(alignment)
 
 
-    //ᅟ
+    //
     // Allocator that aligns memory allocations by the given size using the default allocator, i.e. global `operator new()` with `std::align_val_t`.
     //
 template <typename T, alignment Alignment>
@@ -160,7 +162,7 @@ gsl_NODISCARD bool operator !=(aligned_default_allocator<T, Alignment> x, aligne
 }
 
 
-    //ᅟ
+    //
     // Allocator adaptor that aligns memory allocations by the given size.
     //
 template <typename T, alignment Alignment, typename A>
@@ -224,12 +226,15 @@ public:
 };
 
 
-    //ᅟ
+    //
     // Deleter for `std::unique_ptr<>` which supports custom allocators.
     //ᅟ
-    //ᅟ    auto p1 = allocate_unique<float>(MyAllocator<float>{ }, 3.14159f); // returns `std::unique_ptr<float, allocator_deleter<float, MyAllocator<float>>>`
-    //ᅟ    auto p2 = allocate_unique<float[]>(MyAllocator<float>{ }, 42); // returns `std::unique_ptr<float[], allocator_deleter<float[], MyAllocator<float>>>`
-    //ᅟ    auto p3 = allocate_unique<float[42]>(MyAllocator<float>{ }); // returns `std::unique_ptr<float[42], allocator_deleter<float[42], MyAllocator<float>>>`
+    //ᅟ    auto p1 = allocate_unique<float>(MyAllocator<float>{ }, 3.14159f);
+    //ᅟ    // returns `std::unique_ptr<float, allocator_deleter<float, MyAllocator<float>>>`
+    //ᅟ    auto p2 = allocate_unique<float[]>(MyAllocator<float>{ }, 42);
+    //ᅟ    // returns `std::unique_ptr<float[], allocator_deleter<float[], MyAllocator<float>>>`
+    //ᅟ    auto p3 = allocate_unique<float[42]>(MyAllocator<float>{ });
+    //ᅟ    // returns `std::unique_ptr<float[42], allocator_deleter<float[42], MyAllocator<float>>>`
     //
 template <typename T, typename A>
 class allocator_deleter : private A // for EBO
@@ -284,7 +289,7 @@ public:
 };
 
 
-    //ᅟ
+    //
     // Allocates an object of type `T` with the given allocator, constructs it with the given arguments and returns a `std::unique_ptr<>` to the object.
     //ᅟ
     //ᅟ    auto p = allocate_unique<float>(MyAllocator<float>{ }, 3.14159f);
@@ -301,7 +306,7 @@ allocate_unique(A alloc, ArgsT&&... args)
     return { ptr, { std::move(alloc) } };
 }
 
-    //ᅟ
+    //
     // Allocates a fixed-size array of type `ArrayT` with the given allocator, default-constructs the elements and returns a `std::unique_ptr<>` to the array.
     //ᅟ
     //ᅟ    auto p = allocate_unique<float[42]>(MyAllocator<float>{ });
@@ -318,7 +323,7 @@ allocate_unique(A alloc)
     return { ptr, { std::move(alloc) } };
 }
 
-    //ᅟ
+    //
     // Allocates an array of type `ArrayT` with the given allocator, default-constructs the elements and returns a `std::unique_ptr<>` to the array.
     //ᅟ
     //ᅟ    auto p = allocate_unique<float[]>(MyAllocator<float>{ }, 42);

@@ -18,7 +18,7 @@ namespace sysmakeshift
 {
 
 
-    //ᅟ
+    //
     // Like `std::thread`, but automatically joins the thread upon destruction.
     // Superseded by `std::jthread` in C++20, which also supports interruption with `std::stop_token`.
     //
@@ -58,23 +58,23 @@ public:
 };
 
 
-    //ᅟ
+    //
     // Simple thread pool with support for thread core affinity.
     //
 class thread_pool
 {
 public:
-        //ᅟ
+        //
         // Thread pool parameters.
         //
     struct params
     {
-            //ᅟ
+            //
             // How many threads to fork. A value of 0 indicates "as many as hardware threads are available".
             //
         int num_threads = 0;
 
-            //ᅟ
+            //
             // Maximal number of hardware threads to pin threads to. A value of 0 indicates "as many as possible".
             // If `max_num_hardware_threads` is 0 and `hardware_thread_mappings` is non-empty, `hardware_thread_mappings.size()` is taken as the
             // maximal number of hardware threads to pin threads to.
@@ -83,12 +83,12 @@ public:
             //
         int max_num_hardware_threads = 0;
 
-            //ᅟ
+            //
             // Controls whether threads are pinned to hardware threads, i.e. whether threads have a core affinity. Helps maintain data locality.
             //
         bool pin_to_hardware_threads = false;
 
-            //ᅟ
+            //
             // Maps thread indices to hardware thread ids. If empty, the thread pool uses thread indices as hardware thread ids.
             // If non-empty and if `max_num_hardware_threads == 0`, `hardware_thread_mappings.size()` is taken as the maximal number of hardware
             // threads to pin threads to.
@@ -96,7 +96,7 @@ public:
         gsl::span<int const> hardware_thread_mappings = { };
     };
 
-        //ᅟ
+        //
         // State passed to tasks that are executed in thread pool.
         //
     class task_context
@@ -114,12 +114,12 @@ public:
         }
 
     public:
-            //ᅟ
+            //
             // The current thread index.
             //
         gsl_NODISCARD int thread_index(void) const noexcept { return threadIdx_; }
 
-            //ᅟ
+            //
             // The number of concurrent threads.
             //
         gsl_NODISCARD int num_threads(void) const noexcept { return impl_.numThreads_; }
@@ -151,12 +151,12 @@ public:
     thread_pool(thread_pool const&) = delete;
     thread_pool& operator =(thread_pool const&) = delete;
 
-        //ᅟ
+        //
         // The number of concurrent threads.
         //
     gsl_NODISCARD int num_threads(void) const { return handle_->numThreads_; }
 
-        //ᅟ
+        //
         // Runs the given action on as many threads as indicated by `concurrency`, and waits until all tasks have run to completion.
         //ᅟ
         // `concurrency == 0` indicates that the maximum concurrency level should be used, i.e. the task is run on all threads in the thread pool.
@@ -170,7 +170,7 @@ public:
         do_run(nullptr, std::move(action), concurrency, false);
     }
 
-        //ᅟ
+        //
         // Runs the given action on as many threads as indicated by `concurrency`, and waits until all tasks have run to completion.
         //ᅟ
         // `concurrency == 0` indicates that the maximum concurrency level should be used, i.e. the task is run on all threads in the thread pool.
@@ -184,7 +184,7 @@ public:
         do_run(nullptr, std::move(action), concurrency, true);
     }
 
-        //ᅟ
+        //
         // Runs the given action on as many threads as indicated by `concurrency`, and returns a `std::future<void>` which
         // represents the completion state of the tasks.
         //ᅟ
@@ -201,7 +201,7 @@ public:
         return result;
     }
 
-        //ᅟ
+        //
         // Runs the given action on as many threads as indicated by `concurrency`, and returns a `std::future<void>` which
         // represents the completion state of the tasks.
         //ᅟ
