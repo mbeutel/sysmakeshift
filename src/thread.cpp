@@ -523,14 +523,16 @@ public:
             {
                 detail::setThreadAttrAffinity(attr.attr, getHardwareThreadId(i, maxNumHardwareThreads_, hardwareThreadMappings_));
             }
-# endif
+# endif // defined(__linux__)
             auto handle = pthread_t{ };
             detail::posixCheck(::pthread_create(&handle, &attr.attr, &thread_pool_thread::threadFunc, &data_[i]));
             handles_[i] = pthread_handle(handle);
         }
 
+# if defined(__linux__)
             // Release thread mapping data.
         hardwareThreadMappings_ = { };
+# endif // defined(__linux__)
 #else
 # error Unsupported operating system.
 #endif

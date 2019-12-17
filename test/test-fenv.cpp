@@ -100,23 +100,30 @@ TEST_CASE("set_trapping_fe_exceptions")
     auto scopedExcTranslator = ScopedStructuredExceptionTranslator(translateStructuredExceptionToStdException);
 #endif // _MSC_VER
 
+#if defined(_MSC_VER)
     auto [excFunc, excCode] = GENERATE(
         std::tuple{ &divBy0, FE_DIVBYZERO },
         std::tuple{ &inexact, FE_INEXACT },
         std::tuple{ &invalid, FE_INVALID }
     );
+#else // ^^^ defined(_MSC_VER) ^^^ / vvv !defined(_MSC_VER) vvv
+    auto [excFunc, excCode] = GENERATE(
+            // GCC has trouble recovering from more than one SIGFPE, so we only test one.
+        std::tuple{ &divBy0, FE_DIVBYZERO }
+    );
+#endif // defined(_MSC_VER)
 
     SECTION("Can detect floating-point exceptions")
     {
-        std::feclearexcept(FE_ALL_EXCEPT);
+        CHECK(std::feclearexcept(FE_ALL_EXCEPT) == 0);
         REQUIRE_NOTHROW(excFunc());
         REQUIRE(std::fetestexcept(excCode));
-        std::feclearexcept(FE_ALL_EXCEPT);
+        CHECK(std::feclearexcept(FE_ALL_EXCEPT) == 0);
     }
 
     SECTION("Does not raise exception if flag is not set")
     {
-        std::feclearexcept(FE_ALL_EXCEPT);
+        CHECK(std::feclearexcept(FE_ALL_EXCEPT) == 0);
         sysmakeshift::set_trapping_fe_exceptions(FE_ALL_EXCEPT & ~excCode);
         CHECK(sysmakeshift::get_trapping_fe_exceptions() == (FE_ALL_EXCEPT & ~excCode));
         CHECK_NOTHROW(excFunc());
@@ -138,5 +145,5 @@ TEST_CASE("set_trapping_fe_exceptions")
         sysmakeshift::set_trapping_fe_exceptions(0);
 #endif // defined(_MSC_VER) or (defined(__GNUC__) && !defined(__clang__))
     }
-    std::feclearexcept(FE_ALL_EXCEPT);
+    CHECK(std::feclearexcept(FE_ALL_EXCEPT) == 0);
 }
