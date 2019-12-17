@@ -12,6 +12,12 @@
 namespace smk = sysmakeshift;
 
 
+#if defined(_WIN32) || defined(__linux__)
+# define THREAD_PINNING_SUPPORTED
+#endif // defined(_WIN32) || defined(__linux__)
+
+
+
 TEST_CASE("thread_pool can schedule single task")
 {
     GENERATE(range(0, 20)); // repetitions
@@ -30,6 +36,9 @@ TEST_CASE("thread_pool can schedule single task")
     auto params = smk::thread_pool::params{
         /*.num_threads = */ numThreads
     };
+#ifndef THREAD_PINNING_SUPPORTED
+    params.pin_to_hardware_threads = false;
+#endif // !THREAD_PINNING_SUPPORTED
 
     auto action = [&]
     (smk::thread_pool::task_context ctx)
@@ -51,7 +60,9 @@ TEST_CASE("thread_pool can schedule single task")
 
     CAPTURE(numThreads);
 
+#ifdef THREAD_PINNING_SUPPORTED
     CHECK(threadIds.size() == static_cast<std::size_t>(numActualThreads));
+#endif // THREAD_PINNING_SUPPORTED
     CHECK(threadIndices.size() == static_cast<std::size_t>(numActualThreads));
 }
 
@@ -75,6 +86,9 @@ TEST_CASE("thread_pool can schedule multiple tasks")
     auto params = smk::thread_pool::params{
         /*.num_threads = */ numThreads
     };
+#ifndef THREAD_PINNING_SUPPORTED
+    params.pin_to_hardware_threads = false;
+#endif // !THREAD_PINNING_SUPPORTED
 
     auto action = [&]
     (smk::thread_pool::task_context ctx)
@@ -111,13 +125,17 @@ TEST_CASE("thread_pool can schedule multiple tasks")
 
     if (numTasks != 0)
     {
+#ifdef THREAD_PINNING_SUPPORTED
         CHECK(threadId_Count.size() == static_cast<std::size_t>(numActualThreads));
+#endif // THREAD_PINNING_SUPPORTED
         CHECK(threadIndex_Count.size() == static_cast<std::size_t>(numActualThreads));
     }
+#ifdef THREAD_PINNING_SUPPORTED
     for (auto const& id_count : threadId_Count)
     {
         CHECK(id_count.second == numTasks);
     }
+#endif // THREAD_PINNING_SUPPORTED
     for (auto const& index_count : threadIndex_Count)
     {
         CHECK(index_count.second == numTasks);
