@@ -36,7 +36,7 @@ static int fegetexcept(void)
     {
         return -1;
     }
-    return fenv.__control & FE_ALL_EXCEPT;
+    return ~fenv.__control & FE_ALL_EXCEPT;
 }
 static int feenableexcept(int excepts)
 {
@@ -49,7 +49,7 @@ static int feenableexcept(int excepts)
     {
         return -1;
     }
-    old_excepts = fenv.__control & FE_ALL_EXCEPT;
+    old_excepts = ~fenv.__control & FE_ALL_EXCEPT;
 
     // unmask
     fenv.__control &= ~new_excepts;
@@ -68,7 +68,7 @@ static int fedisableexcept(int excepts)
     {
         return -1;
     }
-    old_excepts = fenv.__control & FE_ALL_EXCEPT;
+    old_excepts = ~fenv.__control & FE_ALL_EXCEPT;
 
     // mask
     fenv.__control |= new_excepts;

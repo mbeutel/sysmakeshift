@@ -7,9 +7,9 @@
 #if defined(_MSC_VER)
 # include <Windows.h>
 # include <eh.h>      // for _set_se_translator()
-#elif defined(__GNUC__)
+#elif defined(__GNUC__) && defined(__linux__) && !defined(__clang__)
 # include <csignal>
-#endif // defined(_MSC_VER) or defined(__GNUC__)
+#endif
 
 #include <sysmakeshift/fenv.hpp>
 
@@ -56,7 +56,7 @@ void translateStructuredExceptionToStdException(unsigned u, EXCEPTION_POINTERS*)
 {
     throw StructuredException(u);
 }
-#elif defined(__GNUC__) && !defined(__clang__)
+#elif defined(__GNUC__) && defined(__linux__) && !defined(__clang__)
 class FPException : public std::exception
 {
 };
@@ -72,7 +72,7 @@ void fpSignalHandler([[maybe_unused]] int sig)
 }
 
 } // extern "C"
-#endif // defined(_MSC_VER) or (defined(__GNUC__) && !defined(__clang__))
+#endif
 
 
 void divBy0(void)
@@ -100,18 +100,11 @@ TEST_CASE("set_trapping_fe_exceptions")
     auto scopedExcTranslator = ScopedStructuredExceptionTranslator(translateStructuredExceptionToStdException);
 #endif // _MSC_VER
 
-#if defined(_MSC_VER)
     auto [excFunc, excCode] = GENERATE(
         std::tuple{ &divBy0, FE_DIVBYZERO },
         std::tuple{ &inexact, FE_INEXACT },
         std::tuple{ &invalid, FE_INVALID }
     );
-#else // ^^^ defined(_MSC_VER) ^^^ / vvv !defined(_MSC_VER) vvv
-    auto [excFunc, excCode] = GENERATE(
-            // GCC has trouble recovering from more than one SIGFPE, so we only test one.
-        std::tuple{ &divBy0, FE_DIVBYZERO }
-    );
-#endif // defined(_MSC_VER)
 
     SECTION("Can detect floating-point exceptions")
     {
@@ -137,13 +130,17 @@ TEST_CASE("set_trapping_fe_exceptions")
         CHECK(sysmakeshift::get_trapping_fe_exceptions() == excCode);
         CHECK_THROWS_AS(excFunc(), StructuredException);
         sysmakeshift::set_trapping_fe_exceptions(0);
-#elif defined(__GNUC__) && !defined(__clang__)
-        std::signal(SIGFPE, fpSignalHandler);
-        sysmakeshift::set_trapping_fe_exceptions(excCode);
-        CHECK(sysmakeshift::get_trapping_fe_exceptions() == excCode);
-        CHECK_THROWS_AS(excFunc(), FPException);
-        sysmakeshift::set_trapping_fe_exceptions(0);
-#endif // defined(_MSC_VER) or (defined(__GNUC__) && !defined(__clang__))
+#elif defined(__GNUC__) && defined(__linux__) && !defined(__clang__)
+        if (excCode == FE_DIVBYZERO)
+        {
+                // GCC has trouble recovering from more than one SIGFPE, so we only test one.
+            std::signal(SIGFPE, fpSignalHandler);
+            sysmakeshift::set_trapping_fe_exceptions(excCode);
+            CHECK(sysmakeshift::get_trapping_fe_exceptions() == excCode);
+            CHECK_THROWS_AS(excFunc(), FPException);
+            sysmakeshift::set_trapping_fe_exceptions(0);
+        }
+#endif
     }
     CHECK(std::feclearexcept(FE_ALL_EXCEPT) == 0);
 }
