@@ -36,8 +36,8 @@ TEST_CASE("thread_pool can schedule single task")
     auto params = smk::thread_pool::params{
         /*.num_threads = */ numThreads
     };
-#ifndef THREAD_PINNING_SUPPORTED
-    params.pin_to_hardware_threads = false;
+#ifdef THREAD_PINNING_SUPPORTED
+    params.pin_to_hardware_threads = true;
 #endif // !THREAD_PINNING_SUPPORTED
 
     auto action = [&]
@@ -86,8 +86,8 @@ TEST_CASE("thread_pool can schedule multiple tasks")
     auto params = smk::thread_pool::params{
         /*.num_threads = */ numThreads
     };
-#ifndef THREAD_PINNING_SUPPORTED
-    params.pin_to_hardware_threads = false;
+#ifdef THREAD_PINNING_SUPPORTED
+    params.pin_to_hardware_threads = true;
 #endif // !THREAD_PINNING_SUPPORTED
 
     auto action = [&]

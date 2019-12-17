@@ -86,7 +86,7 @@ public:
             //ᅟ
             // Controls whether threads are pinned to hardware threads, i.e. whether threads have a core affinity. Helps maintain data locality.
             //
-        bool pin_to_hardware_threads = true;
+        bool pin_to_hardware_threads = false;
 
             //ᅟ
             // Maps thread indices to hardware thread ids. If empty, the thread pool uses thread indices as hardware thread ids.
