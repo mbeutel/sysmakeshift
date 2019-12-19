@@ -244,7 +244,7 @@ public:
         : A(_alloc)
     {
     }
-    void operator ()(T* ptr)
+    void operator ()(T* ptr) noexcept
     {
         std::allocator_traits<A>::destroy(*this, ptr);
         std::allocator_traits<A>::deallocate(*this, ptr, 1);
@@ -261,7 +261,7 @@ public:
         : A(_alloc), size_(_size)
     {
     }
-    void operator ()(T ptr[])
+    void operator ()(T ptr[]) noexcept
     {
         for (std::ptrdiff_t i = 0, n = std::ptrdiff_t(size_); i != n; ++i)
         {
@@ -278,7 +278,7 @@ public:
         : A(_alloc)
     {
     }
-    void operator ()(T ptr[])
+    void operator ()(T ptr[]) noexcept
     {
         for (std::ptrdiff_t i = 0; i != N; ++i)
         {

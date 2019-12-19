@@ -75,6 +75,11 @@ public:
         int num_threads = 0;
 
             //
+            // Controls whether threads are pinned to hardware threads, i.e. whether threads have a core affinity. Helps maintain data locality.
+            //
+        bool pin_to_hardware_threads = false;
+
+            //
             // Maximal number of hardware threads to pin threads to. A value of 0 indicates "as many as possible".
             // If `max_num_hardware_threads` is 0 and `hardware_thread_mappings` is non-empty, `hardware_thread_mappings.size()` is taken as the
             // maximal number of hardware threads to pin threads to.
@@ -82,11 +87,6 @@ public:
             // Can be useful to increase reproducibility of synchronization and data race bugs by running multiple threads on the same core.
             //
         int max_num_hardware_threads = 0;
-
-            //
-            // Controls whether threads are pinned to hardware threads, i.e. whether threads have a core affinity. Helps maintain data locality.
-            //
-        bool pin_to_hardware_threads = false;
 
             //
             // Maps thread indices to hardware thread ids. If empty, the thread pool uses thread indices as hardware thread ids.
@@ -161,6 +161,8 @@ public:
         //ᅟ
         // `concurrency == 0` indicates that the maximum concurrency level should be used, i.e. the task is run on all threads in the thread pool.
         // `concurrency` may not exceed the number of threads in the thread pool.
+        // The thread pool makes a dedicated copy of `action` for every participating thread and invokes it with an appropriate task context.
+        // If `action()` throws an exception, `std::terminate()` is called.
         //
     void run(std::function<void(task_context)> action, int concurrency = 0) &
     {
@@ -175,6 +177,8 @@ public:
         //ᅟ
         // `concurrency == 0` indicates that the maximum concurrency level should be used, i.e. the task is run on all threads in the thread pool.
         // `concurrency` may not exceed the number of threads in the thread pool.
+        // The thread pool makes a dedicated copy of `action` for every participating thread and invokes it with an appropriate task context.
+        // If `action()` throws an exception, `std::terminate()` is called.
         //
     void run(std::function<void(task_context)> action, int concurrency = 0) &&
     {
@@ -190,6 +194,8 @@ public:
         //ᅟ
         // `concurrency == 0` indicates that the maximum concurrency level should be used, i.e. the task is run on all threads in the thread pool.
         // `concurrency` may not exceed the number of threads in the thread pool.
+        // The thread pool makes a dedicated copy of `action` for every participating thread and invokes it with an appropriate task context.
+        // If `action()` throws an exception, `std::terminate()` is called.
         //
     gsl_NODISCARD std::future<void> run_async(std::function<void(task_context)> action, int concurrency = 0) &
     {
@@ -207,6 +213,8 @@ public:
         //ᅟ
         // `concurrency == 0` indicates that the maximum concurrency level should be used, i.e. the task is run on all threads in the thread pool.
         // `concurrency` may not exceed the number of threads in the thread pool.
+        // The thread pool makes a dedicated copy of `action` for every participating thread and invokes it with an appropriate task context.
+        // If `action()` throws an exception, `std::terminate()` is called.
         //
     gsl_NODISCARD std::future<void> run_async(std::function<void(task_context)> action, int concurrency = 0) &&
     {
