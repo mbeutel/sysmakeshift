@@ -9,13 +9,16 @@
 #include <memory>     // for unique_ptr<>
 #include <functional> // for function<>
 
-#include <gsl/gsl-lite.hpp> // for span<>, not_null<>, ssize(), gsl_NODISCARD
+#include <gsl-lite/gsl-lite.hpp> // for span<>, not_null<>, ssize(), gsl_NODISCARD
 
 #include <sysmakeshift/detail/thread.hpp>
 
 
 namespace sysmakeshift
 {
+
+
+namespace gsl = ::gsl_lite;
 
 
     //
@@ -130,9 +133,9 @@ private:
 
     static params const& check_params(params const& p)
     {
-        Expects(p.num_threads >= 0);
-        Expects(p.max_num_hardware_threads >= 0 && (p.num_threads == 0 || p.max_num_hardware_threads <= p.num_threads));
-        Expects(p.hardware_thread_mappings.empty() || p.max_num_hardware_threads <= gsl::std20::ssize(p.hardware_thread_mappings));
+        gsl_Expects(p.num_threads >= 0);
+        gsl_Expects(p.max_num_hardware_threads >= 0 && (p.num_threads == 0 || p.max_num_hardware_threads <= p.num_threads));
+        gsl_Expects(p.hardware_thread_mappings.empty() || p.max_num_hardware_threads <= gsl::ssize(p.hardware_thread_mappings));
         return p;
     }
 
@@ -166,8 +169,8 @@ public:
         //
     void run(std::function<void(task_context)> action, int concurrency = 0) &
     {
-        Expects(action);
-        Expects(concurrency >= 0 && concurrency <= handle_->numThreads_);
+        gsl_Expects(action);
+        gsl_Expects(concurrency >= 0 && concurrency <= handle_->numThreads_);
 
         do_run(nullptr, std::move(action), concurrency, false);
     }
@@ -182,8 +185,8 @@ public:
         //
     void run(std::function<void(task_context)> action, int concurrency = 0) &&
     {
-        Expects(action);
-        Expects(concurrency >= 0 && concurrency <= handle_->numThreads_);
+        gsl_Expects(action);
+        gsl_Expects(concurrency >= 0 && concurrency <= handle_->numThreads_);
 
         do_run(nullptr, std::move(action), concurrency, true);
     }
@@ -199,8 +202,8 @@ public:
         //
     gsl_NODISCARD std::future<void> run_async(std::function<void(task_context)> action, int concurrency = 0) &
     {
-        Expects(action);
-        Expects(concurrency >= 0 && concurrency <= handle_->numThreads_);
+        gsl_Expects(action);
+        gsl_Expects(concurrency >= 0 && concurrency <= handle_->numThreads_);
 
         std::future<void> result;
         do_run(&result, std::move(action), concurrency, false);
@@ -218,8 +221,8 @@ public:
         //
     gsl_NODISCARD std::future<void> run_async(std::function<void(task_context)> action, int concurrency = 0) &&
     {
-        Expects(action);
-        Expects(concurrency >= 0 && concurrency <= handle_->numThreads_);
+        gsl_Expects(action);
+        gsl_Expects(concurrency >= 0 && concurrency <= handle_->numThreads_);
 
         std::future<void> result;
         do_run(&result, std::move(action), concurrency, true);

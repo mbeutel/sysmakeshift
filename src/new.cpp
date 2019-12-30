@@ -4,7 +4,7 @@
 #include <cstddef>   // for size_t, ptrdiff_t
 #include <exception> // for terminate()
 
-#include <gsl/gsl-lite.hpp> // for Expects(), narrow_cast<>()
+#include <gsl-lite/gsl-lite.hpp> // for gsl_Expects(), narrow_cast<>()
 
 #include <sysmakeshift/new.hpp>
 #include <sysmakeshift/memory.hpp>
@@ -103,7 +103,7 @@ std::size_t hardware_cache_line_size(void) noexcept
             pSlpi = dynSlpi.get();
             success = GetLogicalProcessorInformation(pSlpi, &nbSlpi);
         }
-        Expects(success);
+        gsl_Expects(success);
         for (std::ptrdiff_t i = 0, n = nbSlpi / sizeof(SYSTEM_LOGICAL_PROCESSOR_INFORMATION); i != n; ++i)
         {
             if (pSlpi[i].Relationship == RelationCache && pSlpi[i].Cache.Level == 1 && (pSlpi[i].Cache.Type == CacheData || pSlpi[i].Cache.Type == CacheUnified))
@@ -122,17 +122,17 @@ std::size_t hardware_cache_line_size(void) noexcept
         if (result > 0) return gsl::narrow_cast<std::size_t>(result);
  #endif // _SC_LEVEL1_DCACHE_LINESIZE
         FILE* f = std::fopen("/sys/devices/system/cpu/cpu0/cache/index0/coherency_line_size", "r");
-        Expects(f != nullptr);
+        gsl_Expects(f != nullptr);
         int nf = std::fscanf(f, "%ld", &result);
         std::fclose(f);
-        Expects(nf == 1 && result != 0);
+        gsl_Expects(nf == 1 && result != 0);
         return gsl::narrow_cast<std::size_t>(result);
 
 #elif defined(__APPLE__)
         std::size_t result = 0;
         std::size_t nbResult = sizeof result;
         int ec = sysctlbyname("hw.cachelinesize", &result, &nbResult, 0, 0);
-        Expects(ec == 0);
+        gsl_Expects(ec == 0);
         return result;
 #else
  #error Unsupported operating system.

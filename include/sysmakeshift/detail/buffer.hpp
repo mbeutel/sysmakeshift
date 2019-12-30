@@ -8,13 +8,16 @@
 #include <type_traits>  // for common_type<>, is_nothrow_default_constructible<>
 #include <system_error> // for errc
 
-#include <gsl/gsl-lite.hpp> // for Expects()
+#include <gsl-lite/gsl-lite.hpp> // for gsl_Expects()
 
 #include <sysmakeshift/memory.hpp> // for alignment
 
 
 namespace sysmakeshift
 {
+
+
+namespace gsl = ::gsl_lite;
 
 
 template <typename T, alignment Alignment, typename A>
@@ -312,7 +315,7 @@ public:
 
     friend bool operator ==(aligned_buffer_iterator const& lhs, aligned_buffer_iterator const& rhs)
     {
-        Expects(lhs.data_ == rhs.data_);
+        gsl_Expects(lhs.data_ == rhs.data_);
 
         return lhs.index_ == rhs.index_;
     }
@@ -322,7 +325,7 @@ public:
     }
     friend bool operator <(aligned_buffer_iterator const& lhs, aligned_buffer_iterator const& rhs)
     {
-        Expects(lhs.data_ == rhs.data_);
+        gsl_Expects(lhs.data_ == rhs.data_);
 
         return lhs.index_ < rhs.index_;
     }
@@ -458,7 +461,7 @@ public:
 
     friend bool operator ==(aligned_row_buffer_iterator const& lhs, aligned_row_buffer_iterator const& rhs)
     {
-        Expects(lhs.data_ == rhs.data_);
+        gsl_Expects(lhs.data_ == rhs.data_);
 
         return lhs.index_ == rhs.index_;
     }
@@ -468,7 +471,7 @@ public:
     }
     friend bool operator <(aligned_row_buffer_iterator const& lhs, aligned_row_buffer_iterator const& rhs)
     {
-        Expects(lhs.data_ == rhs.data_);
+        gsl_Expects(lhs.data_ == rhs.data_);
 
         return lhs.index_ < rhs.index_;
     }

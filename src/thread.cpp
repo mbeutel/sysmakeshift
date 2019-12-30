@@ -27,7 +27,7 @@
 # error Unsupported operating system.
 #endif // _WIN32
 
-#include <gsl/gsl-lite.hpp> // for narrow_cast<>()
+#include <gsl-lite/gsl-lite.hpp> // for narrow_cast<>()
 
 #include <sysmakeshift/thread.hpp>
 #include <sysmakeshift/buffer.hpp> // for aligned_buffer<>
@@ -118,7 +118,7 @@ void setCurrentThreadDescription(const wchar_t* threadDescription)
     static SetThreadDescriptionType* const setThreadDescription = []
     {
         HMODULE hKernel32 = ::GetModuleHandleW(L"kernel32.dll");
-        Expects(hKernel32 != NULL);
+        gsl_Expects(hKernel32 != NULL);
         return (SetThreadDescriptionType*) ::GetProcAddress(hKernel32, "SetThreadDescriptionType"); // available since Windows 10 1607 or Windows Server 2016
     }();
 
@@ -167,7 +167,7 @@ public:
     }
     void setCpuFlag(std::size_t coreIdx)
     {
-        Expects(coreIdx < cpuCount_);
+        gsl_Expects(coreIdx < cpuCount_);
         std::size_t lsize = size();
         CPU_SET_S(coreIdx, lsize, data_);
     }
@@ -304,15 +304,15 @@ public:
         : value_(0), baseValue_(0), numThreads_(static_cast<unsigned>(_numThreads))
     {
             // We permit constructing a barrier with 0 threads, but calling `wait()` on it is illegal.
-        Expects(_numThreads >= 0);
+        gsl_Expects(_numThreads >= 0);
 
             // This is necessary to permit overlapping rounds.
-        Expects(numThreads_ < std::numeric_limits<unsigned>::max() / 2);
+        gsl_Expects(numThreads_ < std::numeric_limits<unsigned>::max() / 2);
     }
 
     bool wait()
     {
-        Expects(numThreads_ != 0);
+        gsl_Expects(numThreads_ != 0);
 
         if (numThreads_ == 1) return true;
 

@@ -5,8 +5,6 @@
 
 #include <memory> // for unique_ptr<>
 
-#include <gsl/gsl-lite.hpp> // for not_null<>
-
 
 namespace sysmakeshift
 {

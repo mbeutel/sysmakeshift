@@ -1,7 +1,7 @@
 
 #include <cfenv> // for FE_*
 
-#include <gsl/gsl-lite.hpp> // for Expects()
+#include <gsl-lite/gsl-lite.hpp> // for gsl_Expects()
 
 #include <sysmakeshift/fenv.hpp>
 
@@ -80,7 +80,7 @@ static int fedisableexcept(int excepts)
 
 gsl_NODISCARD bool try_set_trapping_fe_exceptions(int excepts) noexcept
 {
-    Expects((excepts & ~FE_ALL_EXCEPT) == 0);
+    gsl_Expects((excepts & ~FE_ALL_EXCEPT) == 0);
 
 #if defined(_WIN32)
     unsigned oldFlags;
@@ -89,7 +89,7 @@ gsl_NODISCARD bool try_set_trapping_fe_exceptions(int excepts) noexcept
     return result == 0;
 #elif defined(__linux__) || defined(APPLE_INTEL)
     int flags = fegetexcept();
-    Expects(flags != -1);
+    gsl_Expects(flags != -1);
     int exceptsToEnable = excepts & ~(flags & FE_ALL_EXCEPT);
     int exceptsToDisable = ~excepts & (flags & FE_ALL_EXCEPT);
     if (exceptsToEnable != 0)
@@ -113,11 +113,11 @@ int get_trapping_fe_exceptions(void) noexcept
 #if defined(_WIN32)
     unsigned flags;
     int result = _controlfp_s(&flags, 0, 0);
-    Expects(result == 0);
+    gsl_Expects(result == 0);
     return FE_ALL_EXCEPT & ~static_cast<int>(flags); // convert flags
 #elif defined(__linux__) || defined(APPLE_INTEL)
     int flags = fegetexcept();
-    Expects(flags != -1);
+    gsl_Expects(flags != -1);
     return flags & FE_ALL_EXCEPT;
 #else
  #error Unsupported operating system.

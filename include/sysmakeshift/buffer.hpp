@@ -8,7 +8,7 @@
 #include <utility>  // for move(), in_place (C++17)
 #include <iterator> // for random_access_iterator_tag
 
-#include <gsl/gsl-lite.hpp> // for Expects(), span<>, gsl_NODISCARD, gsl_CPP17_OR_GREATER
+#include <gsl-lite/gsl-lite.hpp> // for gsl_Expects(), span<>, gsl_NODISCARD, gsl_CPP17_OR_GREATER
 
 #include <sysmakeshift/memory.hpp> // for alignment, aligned_allocator<>
 
@@ -17,6 +17,9 @@
 
 namespace sysmakeshift
 {
+
+
+namespace gsl = ::gsl_lite;
 
 
     //
@@ -128,22 +131,22 @@ public:
 
     gsl_NODISCARD reference front(void)
     {
-        Expects(!empty());
+        gsl_Expects(!empty());
         return (*this)[0];
     }
     gsl_NODISCARD const_reference front(void) const
     {
-        Expects(!empty());
+        gsl_Expects(!empty());
         return (*this)[0];
     }
     gsl_NODISCARD reference back(void)
     {
-        Expects(!empty());
+        gsl_Expects(!empty());
         return (*this)[size() - 1];
     }
     gsl_NODISCARD const_reference back(void) const
     {
-        Expects(!empty());
+        gsl_Expects(!empty());
         return (*this)[size() - 1];
     }
 };
@@ -263,22 +266,22 @@ public:
 
     gsl_NODISCARD reference front(void)
     {
-        Expects(!empty());
+        gsl_Expects(!empty());
         return (*this)[0];
     }
     gsl_NODISCARD const_reference front(void) const
     {
-        Expects(!empty());
+        gsl_Expects(!empty());
         return (*this)[0];
     }
     gsl_NODISCARD reference back(void)
     {
-        Expects(!empty());
+        gsl_Expects(!empty());
         return (*this)[size() - 1];
     }
     gsl_NODISCARD const_reference back(void) const
     {
-        Expects(!empty());
+        gsl_Expects(!empty());
         return (*this)[size() - 1];
     }
 };

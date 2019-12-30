@@ -12,15 +12,17 @@
 #include <utility>     // for forward<>()
 #include <type_traits> // for is_nothrow_default_constructible<>, enable_if<>, is_same<>, remove_cv<>
 
-#include <gsl/gsl-lite.hpp> // for Expects(), gsl_NODISCARD
+#include <gsl-lite/gsl-lite.hpp> // for gsl_DEFINE_ENUM_BITMASK_OPERATORS(), gsl_Expects(), gsl_NODISCARD
 
 #include <sysmakeshift/detail/memory.hpp>
 #include <sysmakeshift/detail/type_traits.hpp> // for can_instantiate<>
-#include <sysmakeshift/detail/enum.hpp>        // for SYSMAKESHIFT_DEFINE_ENUM_BITMASK_OPERATORS()
 
 
 namespace sysmakeshift
 {
+
+
+namespace gsl = ::gsl_lite;
 
 
     //
@@ -109,7 +111,7 @@ enum class alignment : std::size_t
     cache_line = std::size_t(1) << (sizeof(std::size_t) * 8u - 3u),
     none = 0
 };
-SYSMAKESHIFT_DEFINE_ENUM_BITMASK_OPERATORS(alignment)
+gsl_DEFINE_ENUM_BITMASK_OPERATORS(alignment)
 
 
     //
@@ -190,7 +192,7 @@ public:
         void* mem = std::allocator_traits<ByteAllocator>::allocate(byteAllocator, nbAlloc);
         void* alignedMem = mem;
         void* alignResult = std::align(a, nbData + sizeof(void*), alignedMem, nbAlloc);
-        Expects(alignResult != nullptr && nbAlloc >= nbData + sizeof(void*)); // should not happen
+        gsl_Expects(alignResult != nullptr && nbAlloc >= nbData + sizeof(void*)); // should not happen
 
             // Store pointer to actual allocation at end of buffer. Use `memcpy()` so we don't have to worry about alignment.
         std::memcpy(static_cast<char*>(alignResult) + nbData, &mem, sizeof(void*));

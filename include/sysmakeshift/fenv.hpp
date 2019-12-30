@@ -3,11 +3,14 @@
 #define INCLUDED_SYSMAKESHIFT_FENV_HPP_
 
 
-#include <gsl/gsl-lite.hpp> // for Expects(), gsl_NODISCARD
+#include <gsl-lite/gsl-lite.hpp> // for gsl_Expects(), gsl_NODISCARD
 
 
 namespace sysmakeshift
 {
+
+
+namespace gsl = ::gsl_lite;
 
 
     //
@@ -26,7 +29,7 @@ gsl_NODISCARD bool try_set_trapping_fe_exceptions(int excepts) noexcept;
 inline void set_trapping_fe_exceptions(int excepts)
 {
     bool succeeded = try_set_trapping_fe_exceptions(excepts);
-    Expects(succeeded);
+    gsl_Expects(succeeded);
 }
 
     //
