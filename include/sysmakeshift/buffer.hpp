@@ -96,15 +96,15 @@ public:
     }
     gsl_NODISCARD reference operator [](std::size_t i)
     {
-        Expects(i < data_.get_deleter().size_);
+        gsl_Expects(i < data_.get_deleter().size_);
 
-        return reinterpret_cast<reference>(data_.get()[i * data_.get_deleter().bytesPerElement_]);
+        return *reinterpret_cast<pointer>(&data_.get()[i * data_.get_deleter().bytesPerElement_]);
     }
     gsl_NODISCARD const_reference operator [](std::size_t i) const
     {
-        Expects(i < data_.get_deleter().size_);
+        gsl_Expects(i < data_.get_deleter().size_);
 
-        return reinterpret_cast<reference>(data_.get()[i * data_.get_deleter().bytesPerElement_]);
+        return *reinterpret_cast<pointer>(&data_.get()[i * data_.get_deleter().bytesPerElement_]);
     }
 
     gsl_NODISCARD iterator begin(void) noexcept
@@ -155,7 +155,7 @@ public:
     //
     // Two-dimensional buffer with aligned rows.
     //ᅟ
-    //ᅟ    auto threadData = aligned_buffer<float, alignment::cache_line>(rows, cols);
+    //ᅟ    auto threadData = aligned_row_buffer<float, alignment::cache_line>(rows, cols);
     //ᅟ    // every `threadData[i][0]` has cache-line alignment => no false sharing
     //
 template <typename T, alignment Alignment, typename A = std::allocator<T>>
@@ -231,15 +231,15 @@ public:
     }
     gsl_NODISCARD gsl::span<T> operator [](std::size_t i)
     {
-        Expects(i < data_.get_deleter().rows_);
+        gsl_Expects(i < data_.get_deleter().rows_);
 
-        return { reinterpret_cast<reference>(&data_.get()[i * data_.get_deleter().bytesPerRow_]), data_.get_deleter().cols_ };
+        return { reinterpret_cast<T*>(&data_.get()[i * data_.get_deleter().bytesPerRow_]), data_.get_deleter().cols_ };
     }
     gsl_NODISCARD gsl::span<T const> operator [](std::size_t i) const
     {
-        Expects(i < data_.get_deleter().rows_);
+        gsl_Expects(i < data_.get_deleter().rows_);
 
-        return { reinterpret_cast<reference>(&data_.get()[i * data_.get_deleter().bytesPerRow_]), data_.get_deleter().cols_ };
+        return { reinterpret_cast<T*>(&data_.get()[i * data_.get_deleter().bytesPerRow_]), data_.get_deleter().cols_ };
     }
 
     gsl_NODISCARD iterator begin(void) noexcept
