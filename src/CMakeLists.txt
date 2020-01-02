@@ -30,7 +30,7 @@ target_compile_features(sysmakeshift
 
 # compiler settings
 include(CMakeshift/TargetCompileSettings)
-CMakeshift_target_compile_settings(sysmakeshift
+cmakeshift_target_compile_settings(sysmakeshift
     PRIVATE
         default)
 

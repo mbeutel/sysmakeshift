@@ -23,6 +23,7 @@ namespace gsl = ::gsl_lite;
 
     //
     // Like `std::thread`, but automatically joins the thread upon destruction.
+    //ᅟ
     // Superseded by `std::jthread` in C++20, which also supports interruption with `std::stop_token`.
     //
 class jthread : private std::thread
@@ -84,8 +85,8 @@ public:
 
             //
             // Maximal number of hardware threads to pin threads to. A value of 0 indicates "as many as possible".
-            // If `max_num_hardware_threads` is 0 and `hardware_thread_mappings` is non-empty, `hardware_thread_mappings.size()` is taken as the
-            // maximal number of hardware threads to pin threads to.
+            //ᅟ
+            // If `max_num_hardware_threads` is 0 and `hardware_thread_mappings` is non-empty, `hardware_thread_mappings.size()` is taken as the maximal number of hardware threads to pin threads to.
             // If `hardware_thread_mappings` is not empty, `max_num_hardware_threads` must not be larger than `hardware_thread_mappings.size()`.
             // Can be useful to increase reproducibility of synchronization and data race bugs by running multiple threads on the same core.
             //
@@ -93,8 +94,8 @@ public:
 
             //
             // Maps thread indices to hardware thread ids. If empty, the thread pool uses thread indices as hardware thread ids.
-            // If non-empty and if `max_num_hardware_threads == 0`, `hardware_thread_mappings.size()` is taken as the maximal number of hardware
-            // threads to pin threads to.
+            //ᅟ
+            // If non-empty and if `max_num_hardware_threads == 0`, `hardware_thread_mappings.size()` is taken as the maximal number of hardware threads to pin threads to.
             //
         gsl::span<int const> hardware_thread_mappings = { };
     };

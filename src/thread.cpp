@@ -321,7 +321,7 @@ public:
 
         auto lbaseValue = baseValue_;
         auto lock = std::unique_lock(m_);
-        unsigned pos = ++value_;
+        std::size_t pos = ++value_;
         if (pos == lbaseValue + numThreads_) // may overflow
         {
                 // We are the last thread to arrive at the barrier. Update the base value and signal the condition variable.
