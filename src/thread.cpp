@@ -21,13 +21,16 @@
 # include <process.h> // _beginthreadex()
 #elif defined(__linux__) || defined(__APPLE__)
 # define USE_PTHREAD
+# ifdef __linux__
+#  define USE_PTHREAD_SETAFFINITY
+# endif
 # include <cerrno>
 # include <pthread.h> // pthread_self(), pthread_setaffinity_np()
 #else
 # error Unsupported operating system.
 #endif // _WIN32
 
-#include <gsl-lite/gsl-lite.hpp> // for narrow_cast<>()
+#include <gsl-lite/gsl-lite.hpp> // for narrow<>(), narrow_cast<>(), span<>
 
 #include <sysmakeshift/thread.hpp>
 #include <sysmakeshift/buffer.hpp> // for aligned_buffer<>
@@ -138,7 +141,7 @@ void setCurrentThreadDescription(const wchar_t* threadDescription)
     }
 }
 
-#elif defined(__linux__)
+#elif defined(USE_PTHREAD_SETAFFINITY)
 struct cpu_set
 {
 private:
@@ -188,7 +191,7 @@ static void setThreadAffinity(std::thread::native_handle_type handle, std::size_
         throw std::range_error("cannot currently handle more than 8*sizeof(void*) CPUs on Windows");
     }
     win32Assert(SetThreadAffinityMask((HANDLE) handle, DWORD_PTR(1) << coreIdx) != 0);
-# elif defined(__linux__)
+# elif defined(USE_PTHREAD_SETAFFINITY)
     cpu_set cpuSet;
     cpuSet.setCpuFlag(coreIdx);
     posixCheck(::pthread_setaffinity_np((pthread_t) handle, cpuSet.size(), cpuSet.data()));
@@ -198,14 +201,14 @@ static void setThreadAffinity(std::thread::native_handle_type handle, std::size_
 }
 #endif // _WIN32
 
-#ifdef __linux__
+#ifdef USE_PTHREAD_SETAFFINITY
 static void setThreadAttrAffinity(pthread_attr_t& attr, std::size_t coreIdx)
 {
     cpu_set cpuSet;
     cpuSet.setCpuFlag(coreIdx);
     posixCheck(::pthread_attr_setaffinity_np(&attr, cpuSet.size(), cpuSet.data()));
 }
-#endif // __linux__
+#endif // USE_PTHREAD_SETAFFINITY
 
 
 #if defined(_WIN32)
@@ -293,24 +296,24 @@ static std::atomic<unsigned> threadPoolCounter{ };
 class barrier
 {
 private:
-    unsigned value_;
-    unsigned baseValue_;
-    unsigned numThreads_;
+    std::size_t value_;
+    std::size_t baseValue_;
+    std::size_t numThreads_;
     std::condition_variable cv_;
     std::mutex m_;
 
 public:
-    barrier(int _numThreads)
-        : value_(0), baseValue_(0), numThreads_(static_cast<unsigned>(_numThreads))
+    barrier(std::ptrdiff_t _numThreads)
+        : value_(0), baseValue_(0), numThreads_(gsl::narrow<std::size_t>(_numThreads))
     {
-            // We permit constructing a barrier with 0 threads, but calling `wait()` on it is illegal.
+            // We permit constructing a barrier with 0 threads, but calling `arrive_and_wait()` on it is illegal.
         gsl_Expects(_numThreads >= 0);
 
             // This is necessary to permit overlapping rounds.
-        gsl_Expects(numThreads_ < std::numeric_limits<unsigned>::max() / 2);
+        gsl_Expects(numThreads_ < std::numeric_limits<std::size_t>::max() / 2);
     }
 
-    bool wait()
+    bool arrive_and_wait(void)
     {
         gsl_Expects(numThreads_ != 0);
 
@@ -394,16 +397,16 @@ private:
 #ifdef USE_PTHREAD
     bool needLaunch_;
 #endif // USE_PTHREAD
-#ifdef __linux__
+#ifdef USE_PTHREAD_SETAFFINITY
     bool pinToHardwareThreads_;
     int maxNumHardwareThreads_;
     std::vector<int> hardwareThreadMappings_;
-#endif // __linux__
+#endif // USE_PTHREAD_SETAFFINITY
 
     static std::size_t getHardwareThreadId(int threadIdx, int maxNumHardwareThreads, gsl::span<int const> hardwareThreadMappings)
     {
         auto subidx = threadIdx % maxNumHardwareThreads;
-        return gsl::narrow_cast<std::size_t>(
+        return gsl::narrow<std::size_t>(
             !hardwareThreadMappings.empty() ? hardwareThreadMappings[subidx]
           : subidx);
     }
@@ -453,7 +456,7 @@ public:
         : thread_pool_impl_base{ p.num_threads },
           barrier_(p.num_threads),
           nextJob_{ },
-          data_(gsl::narrow_cast<std::size_t>(p.num_threads), std::in_place, *this, nextJob_.get_future().share()),
+          data_(gsl::narrow<std::size_t>(p.num_threads), std::in_place, *this, nextJob_.get_future().share()),
 #ifdef _WIN32
           threadPoolId_(threadPoolCounter++),
 #endif // _WIN32
@@ -466,7 +469,7 @@ public:
 
 #if defined(_WIN32)
             // Create threads suspended; set core affinity if desired.
-        handles_ = std::make_unique<detail::win32_handle[]>(gsl::narrow_cast<std::size_t>(p.num_threads));
+        handles_ = std::make_unique<detail::win32_handle[]>(gsl::narrow<std::size_t>(p.num_threads));
         DWORD threadCreationFlags = p.pin_to_hardware_threads ? CREATE_SUSPENDED : 0;
         for (int i = 0; i < p.num_threads; ++i)
         {
@@ -479,21 +482,21 @@ public:
             }
             handles_[i] = std::move(handle);
         }
-#elif defined(__linux__)
+#elif defined(USE_PTHREAD_SETAFFINITY)
             // Store hardware thread mappings for delayed thread creation.
         pinToHardwareThreads_ = p.pin_to_hardware_threads;
         maxNumHardwareThreads_ = p.max_num_hardware_threads;
         hardwareThreadMappings_.assign(p.hardware_thread_mappings.begin(), p.hardware_thread_mappings.end());
 #endif
 #ifdef USE_PTHREAD
-        handles_ = std::make_unique<detail::pthread_handle[]>(gsl::narrow_cast<std::size_t>(p.num_threads));
+        handles_ = std::make_unique<detail::pthread_handle[]>(gsl::narrow<std::size_t>(p.num_threads));
         needLaunch_ = false;
 #endif // USE_PTHREAD
     }
 
     bool wait_at_barrier(void)
     {
-        return barrier_.wait();
+        return barrier_.arrive_and_wait();
     }
 
 
@@ -518,21 +521,21 @@ public:
         for (int i = 0; i < numThreads_; ++i)
         {
             PThreadAttr attr;
-# if defined(__linux__)
+# if defined(USE_PTHREAD_SETAFFINITY)
             if (pinToHardwareThreads_)
             {
                 detail::setThreadAttrAffinity(attr.attr, getHardwareThreadId(i, maxNumHardwareThreads_, hardwareThreadMappings_));
             }
-# endif // defined(__linux__)
+# endif // defined(USE_PTHREAD_SETAFFINITY)
             auto handle = pthread_t{ };
             detail::posixCheck(::pthread_create(&handle, &attr.attr, &thread_pool_thread::threadFunc, &data_[i]));
             handles_[i] = pthread_handle(handle);
         }
 
-# if defined(__linux__)
+# if defined(USE_PTHREAD_SETAFFINITY)
             // Release thread mapping data.
         hardwareThreadMappings_ = { };
-# endif // defined(__linux__)
+# endif // defined(USE_PTHREAD_SETAFFINITY)
 #else
 # error Unsupported operating system.
 #endif
@@ -673,7 +676,7 @@ void thread_pool_impl_deleter::operator ()(thread_pool_impl_base* impl)
 detail::thread_pool_handle thread_pool::create(thread_pool::params p)
 {
         // Replace placeholder arguments with appropriate default values.
-    int hardwareConcurrency = gsl::narrow_cast<int>(std::thread::hardware_concurrency());
+    int hardwareConcurrency = gsl::narrow<int>(std::thread::hardware_concurrency());
     if (p.num_threads == 0)
     {
         p.num_threads = hardwareConcurrency;
@@ -681,20 +684,20 @@ detail::thread_pool_handle thread_pool::create(thread_pool::params p)
     if (p.max_num_hardware_threads == 0)
     {
         p.max_num_hardware_threads =
-            !p.hardware_thread_mappings.empty() ? gsl::narrow_cast<int>(p.hardware_thread_mappings.size())
+            !p.hardware_thread_mappings.empty() ? gsl::narrow<int>(p.hardware_thread_mappings.size())
           : hardwareConcurrency;
     }
     p.max_num_hardware_threads = std::max(p.max_num_hardware_threads, hardwareConcurrency);
 
         // Check system support for thread pinning.
-#if !defined(_WIN32) && !defined(__linux__)
+#if !defined(_WIN32) && !defined(USE_PTHREAD_SETAFFINITY)
     if (p.pin_to_hardware_threads)
     {
             // Thread pinning not currently supported on this OS.
         throw std::system_error(std::make_error_code(std::errc::not_supported),
             "pinning to hardware threads is not implemented on this operating system");
     }
-#endif // !defined(_WIN32) && !defined(__linux__)
+#endif // !defined(_WIN32) && !defined(USE_PTHREAD_SETAFFINITY)
 
     return detail::thread_pool_handle(new detail::thread_pool_impl(p));
 }
