@@ -125,7 +125,7 @@ gsl_DEFINE_ENUM_BITMASK_OPERATORS(alignment)
     //
 constexpr bool provides_static_alignment(alignment alignmentProvided, alignment alignmentRequested) noexcept
 {
-    return detail::provides_static_alignment(alignmentProvided, alignmentRequested, alignment::special_alignments);
+    return detail::provides_static_alignment(alignmentProvided, alignmentRequested);
 }
 
     //

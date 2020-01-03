@@ -53,9 +53,11 @@ constexpr int bit_scan_reverse(U mask)
     return result;
 }
 
-constexpr bool provides_static_alignment(alignment alignmentProvided, alignment alignmentRequested, alignment specialAlignments) noexcept
+constexpr std::size_t special_alignments = std::numeric_limits<std::size_t>::max() & ~(std::numeric_limits<std::size_t>::max() >> 3); // = std::size_t(alignment::large_page | alignment::page | alignment::cache_line)
+
+constexpr bool provides_static_alignment(alignment alignmentProvided, alignment alignmentRequested) noexcept
 {
-    std::size_t highestAlignmentProvided = std::size_t(1) << std::size_t(detail::bit_scan_reverse(std::size_t(alignmentProvided) & ~std::size_t(specialAlignments))); // only most significant bit
+    std::size_t highestAlignmentProvided = std::size_t(1) << std::size_t(detail::bit_scan_reverse(std::size_t(alignmentProvided) & ~special_alignments)); // only most significant bit
     std::size_t allAlignmentsProvided = std::size_t(alignmentProvided) | (highestAlignmentProvided - 1);
     return (std::size_t(alignmentRequested) & allAlignmentsProvided) == std::size_t(alignmentRequested);
 }
@@ -158,7 +160,7 @@ public:
 
     gsl_NODISCARD T* allocate(std::size_t n)
     {
-        std::size_t a = detail::alignment_in_bytes(Alignment | alignment(alignof(T)));
+        std::size_t a = detail::alignment_in_bytes(alignment(std::size_t(Alignment) | alignof(T)));
         if (n >= std::numeric_limits<std::size_t>::max() / sizeof(T)) throw std::bad_alloc{ }; // overflow
         std::size_t nbData = n * sizeof(T);
         std::size_t nbAlloc = nbData + a + sizeof(void*) - 1;
@@ -178,7 +180,7 @@ public:
     }
     void deallocate(T* ptr, std::size_t n) noexcept
     {
-        std::size_t a = detail::alignment_in_bytes(Alignment | alignment(alignof(T)));
+        std::size_t a = detail::alignment_in_bytes(alignment(std::size_t(Alignment) | alignof(T)));
         std::size_t nbData = n * sizeof(T); // cannot overflow due to preceding check in allocate()
         std::size_t nbAlloc = nbData + a + sizeof(void*) - 1; // cannot overflow due to preceding check in allocate()
 
