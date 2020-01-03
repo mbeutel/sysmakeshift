@@ -80,7 +80,26 @@ struct aligned_buffer_deleter : private A // EBO
     std::size_t bytesPerElement_;
     std::size_t allocSize_; // # bytes
 
-    aligned_buffer_deleter(A _alloc, std::size_t _bytesPerElement, std::size_t _allocSize)
+    constexpr aligned_buffer_deleter(void) noexcept
+        : size_{ },
+          bytesPerElement_{ },
+          allocSize_{ }
+    {
+    }
+    constexpr aligned_buffer_deleter(aligned_buffer_deleter&& rhs) noexcept
+        : size_(std::exchange(rhs.size_, { })),
+          bytesPerElement_(std::exchange(rhs.bytesPerElement_, { })),
+          allocSize_(std::exchange(rhs.allocSize_, { }))
+    {
+    }
+    constexpr aligned_buffer_deleter& operator =(aligned_buffer_deleter&& rhs) noexcept
+    {
+        size_ = std::exchange(rhs.size_, { });
+        bytesPerElement_ = std::exchange(rhs.bytesPerElement_, { });
+        allocSize_ = std::exchange(rhs.allocSize_, { });
+        return *this;
+    }
+    constexpr aligned_buffer_deleter(A _alloc, std::size_t _bytesPerElement, std::size_t _allocSize) noexcept
         : A(std::move(_alloc)), size_(0), bytesPerElement_(_bytesPerElement), allocSize_(_allocSize)
     {
     }
@@ -169,8 +188,30 @@ struct aligned_row_buffer_deleter : private A // EBO
     std::size_t bytesPerRow_;
     std::size_t elements_; // # elements
 
-    aligned_row_buffer_deleter(A _alloc, std::size_t _rows, std::size_t _cols, std::size_t _bytesPerRow)
-        : A(std::move(_alloc)), rows_(_rows), cols_(_cols), bytesPerRow_(_bytesPerRow), elements_(0)
+    constexpr aligned_row_buffer_deleter(void) noexcept
+        : rows_{ },
+          cols_{ },
+          bytesPerRow_{ },
+          elements_{ }
+    {
+    }
+    constexpr aligned_row_buffer_deleter(aligned_row_buffer_deleter&& rhs) noexcept
+        : rows_(std::exchange(rhs.rows_, { })),
+          cols_(std::exchange(rhs.cols_, { })),
+          bytesPerRow_(std::exchange(rhs.bytesPerRow_, { })),
+          elements_(std::exchange(rhs.elements_, { }))
+    {
+    }
+    constexpr aligned_row_buffer_deleter& operator =(aligned_row_buffer_deleter&& rhs) noexcept
+    {
+        rows_ = std::exchange(rhs.rows_, { });
+        cols_ = std::exchange(rhs.cols_, { });
+        bytesPerRow_ = std::exchange(rhs.bytesPerRow_, { });
+        elements_ = std::exchange(rhs.elements_, { });
+        return *this;
+    }
+    constexpr aligned_row_buffer_deleter(A _alloc, std::size_t _rows, std::size_t _cols, std::size_t _bytesPerRow) noexcept
+        : A(std::move(_alloc)), rows_(_rows), cols_(_cols), bytesPerRow_(_bytesPerRow), elements_{ }
     {
     }
 
