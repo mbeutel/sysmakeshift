@@ -307,7 +307,7 @@ allocate_unique(A alloc, ArgsT&&... args)
     using NCVT = std::remove_cv_t<T>;
     static_assert(std::is_same<typename std::allocator_traits<A>::value_type, NCVT>::value, "allocator has mismatching value_type");
 
-    NCVT* ptr = detail::allocate<NCVT>(std::is_nothrow_constructible<NCVT, ArgsT...>{ }, alloc, std::forward<ArgsT>(args)...);
+    NCVT* ptr = detail::allocate<NCVT>(alloc, std::forward<ArgsT>(args)...);
     return { ptr, { std::move(alloc) } };
 }
 
@@ -324,7 +324,7 @@ allocate_unique(A alloc)
     using T = std::remove_cv_t<detail::remove_extent_only_t<ArrayT>>;
     static_assert(std::is_same<typename std::allocator_traits<A>::value_type, T>::value, "allocator has mismatching value_type");
 
-    T* ptr = detail::allocate_array<T>(std::is_nothrow_default_constructible<T>{ }, alloc, detail::extent_only<ArrayT>{ });
+    T* ptr = detail::allocate_array<T>(alloc, detail::extent_only<ArrayT>{ });
     return { ptr, { std::move(alloc) } };
 }
 
@@ -341,7 +341,7 @@ allocate_unique(A alloc, std::size_t size)
     using T = std::remove_cv_t<detail::remove_extent_only_t<ArrayT>>;
     static_assert(std::is_same<typename std::allocator_traits<A>::value_type, T>::value, "allocator has mismatching value_type");
 
-    T* ptr = detail::allocate_array<T>(std::is_nothrow_default_constructible<T>{ }, alloc, size);
+    T* ptr = detail::allocate_array<T>(alloc, size);
     return { ptr, { std::move(alloc), size } };
 }
 

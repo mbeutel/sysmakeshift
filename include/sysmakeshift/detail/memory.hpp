@@ -8,9 +8,16 @@
 #include <type_traits> // for integral_constant<>
 #include <memory>      // for allocator_traits<>
 
+#include <gsl-lite/gsl-lite.hpp> // for void_t<>, negation<>
+
+#include <sysmakeshift/detail/transaction.hpp>
+
 
 namespace sysmakeshift
 {
+
+
+namespace gsl = ::gsl_lite;
 
 
 enum class alignment : std::size_t;
@@ -39,23 +46,22 @@ T* allocate(std::true_type /*isNothrowConstructible*/, A& alloc, ArgsT&&... args
     return ptr;
 }
 template <typename T, typename A, typename... ArgsT>
-T* allocate(std::false_type /*isNothrowConstructible*/, A& alloc, ArgsT&&... args)
+T* allocate(A& alloc, ArgsT&&... args)
 {
     T* ptr = std::allocator_traits<A>::allocate(alloc, 1);
-    try
-    {
-        std::allocator_traits<A>::construct(alloc, ptr, std::forward<ArgsT>(args)...);
-    }
-    catch (...) // TODO: use gsl-lite's `on_error()` instead
-    {
-        std::allocator_traits<A>::deallocate(alloc, ptr, 1);
-        throw;
-    }
+    auto transaction = detail::make_transaction(
+        gsl::negation<std::is_nothrow_constructible<T, ArgsT...>>{ },
+        [&alloc, ptr]
+        {
+            std::allocator_traits<A>::deallocate(alloc, ptr, 1);
+        });
+    std::allocator_traits<A>::construct(alloc, ptr, std::forward<ArgsT>(args)...);
+    transaction.commit();
     return ptr;
 }
 
 template <typename T, typename A, typename SizeC>
-T* allocate_array(std::true_type /*isNothrowDefaultConstructible*/, A& alloc, SizeC sizeC)
+T* allocate_array_impl(std::true_type /*isNothrowDefaultConstructible*/, A& alloc, SizeC sizeC)
 {
     T* ptr = std::allocator_traits<A>::allocate(alloc, std::size_t(sizeC));
     for (std::ptrdiff_t i = 0; i != std::ptrdiff_t(sizeC); ++i)
@@ -65,28 +71,30 @@ T* allocate_array(std::true_type /*isNothrowDefaultConstructible*/, A& alloc, Si
     return ptr;
 }
 template <typename T, typename A, typename SizeC>
-T* allocate_array(std::false_type /*isNothrowDefaultConstructible*/, A& alloc, SizeC sizeC)
+T* allocate_array_impl(std::false_type /*isNothrowDefaultConstructible*/, A& alloc, SizeC sizeC)
 {
     T* ptr = std::allocator_traits<A>::allocate(alloc, std::size_t(sizeC));
     std::ptrdiff_t i = 0;
-    try
-    {
-        for (; i != std::ptrdiff_t(sizeC); ++i)
+    auto transaction = detail::make_transaction(
+        [&alloc, ptr, &i, sizeC]
         {
-            std::allocator_traits<A>::construct(alloc, &ptr[i]);
-        }
-    }
-    catch (...) // TODO: use gsl-lite's `on_error()` instead
+            for (std::ptrdiff_t j = i - 1; j >= 0; --j)
+            {
+                std::allocator_traits<A>::destroy(alloc, &ptr[j]);
+            }
+            std::allocator_traits<A>::deallocate(alloc, ptr, std::size_t(sizeC));
+        });
+    for (; i != std::ptrdiff_t(sizeC); ++i)
     {
-            // Revert by destroying all already-constructed items, deallocating, and then re-throwing the exception.
-        for (--i; i >= 0; --i)
-        {
-            std::allocator_traits<A>::destroy(alloc, &ptr[i]);
-        }
-        std::allocator_traits<A>::deallocate(alloc, ptr, std::size_t(sizeC));
-        throw;
+        std::allocator_traits<A>::construct(alloc, &ptr[i]);
     }
+    transaction.commit();
     return ptr;
+}
+template <typename T, typename A, typename SizeC>
+T* allocate_array(A& alloc, SizeC sizeC)
+{
+    return detail::allocate_array_impl<T>(std::is_nothrow_default_constructible<T>{ }, alloc, sizeC);
 }
 
 
