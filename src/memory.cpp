@@ -46,7 +46,7 @@ static std::size_t floor_2p(std::size_t x)
     return (x + 1) >> 1; // assumes that x < powi(2, sizeof(std::size_t) * 8 - 1), which is given because the most significant bits have special meaning and have been masked out
 }
 
-std::size_t alignment_in_bytes(alignment a) noexcept
+alignment lookup_special_alignments(alignment a) noexcept
 {
     if ((a & alignment::large_page) != alignment{ })
     {
@@ -65,7 +65,11 @@ std::size_t alignment_in_bytes(alignment a) noexcept
         // Mask out flags with special meaning.
     a &= ~(alignment::large_page | alignment::page | alignment::cache_line);
 
-    return std::max(std::size_t(1), floor_2p(std::size_t(a)));
+    return a;
+}
+std::size_t alignment_in_bytes(alignment a) noexcept
+{
+    return std::max(std::size_t(1), floor_2p(std::size_t(lookup_special_alignments(a))));
 }
 
 
