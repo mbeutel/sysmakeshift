@@ -273,7 +273,7 @@ private:
         auto bytesPerRowR = detail::ceili(rawBytesPerRowR.value, detail::alignment_in_bytes(Alignment));
         auto numBytesR = detail::multiply_unsigned(_rows, bytesPerRowR.value);
         if (rawBytesPerRowR.ec != std::errc{ } || bytesPerRowR.ec != std::errc{ } || numBytesR.ec != std::errc{ }) throw std::bad_alloc{ };
-        bytesPerRow_ = bytesPerRowR.value_;
+        bytesPerRow_ = bytesPerRowR.value;
 
         if (_rows == 0 || _cols == 0)
         {
@@ -299,7 +299,7 @@ private:
     }
     void destroy_and_free(void) noexcept
     {
-        detail::destroy_aligned_buffer<T>(data_, get_allocator(), rows_, cols_, bytesPerRow_);
+        detail::destroy_aligned_row_buffer<T>(data_, get_allocator(), rows_, cols_, bytesPerRow_);
         auto alloc = byte_allocator_(get_allocator());
         std::allocator_traits<byte_allocator_>::deallocate(alloc, data_, rows_ * bytesPerRow_);
     }
