@@ -48,6 +48,8 @@ public:
     {
     }
 
+    no_op_transaction_t(void) noexcept = default;
+
     no_op_transaction_t(no_op_transaction_t&&) = delete;
     no_op_transaction_t& operator =(no_op_transaction_t&&) = delete;
 };
