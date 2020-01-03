@@ -1,10 +1,10 @@
 
+#include <sysmakeshift/thread.hpp>
+
 #include <thread>
 #include <mutex>
 #include <unordered_set>
 #include <unordered_map>
-
-#include <sysmakeshift/thread.hpp>
 
 #include <catch2/catch.hpp>
 

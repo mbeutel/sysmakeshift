@@ -1,4 +1,6 @@
 
+#include <sysmakeshift/fenv.hpp>
+
 #include <cfenv>
 #include <cmath>     // for sqrt()
 #include <tuple>
@@ -10,8 +12,6 @@
 #elif defined(__GNUC__) && defined(__linux__) && !defined(__clang__)
 # include <csignal>
 #endif
-
-#include <sysmakeshift/fenv.hpp>
 
 #include <catch2/catch.hpp>
 

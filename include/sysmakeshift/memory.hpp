@@ -217,8 +217,11 @@ public:
 template <typename T, alignment Alignment>
 class aligned_allocator<T, Alignment, aligned_default_allocator<T, Alignment>> : public aligned_default_allocator<T, Alignment>
 {
+    // TODO: instead of specializing for this particular case, we could skip explicit alignment (at compile time!) if we know that the upstream allocator already
+    // provides the same alignment. Perhaps define our own `aligned_allocator_traits<>` to that end?
+
 public:
-    using aligned_default_allocator<T, Alignment>::aligned_default_allocator; // TODO: does this allow constructing an aligned allocator from the underlying allocator?
+    using aligned_default_allocator<T, Alignment>::aligned_default_allocator;
 
     template <typename U>
     struct rebind

@@ -30,6 +30,10 @@
 # error Unsupported operating system.
 #endif // _WIN32
 
+#if defined(_WIN32) || defined(USE_PTHREAD_SETAFFINITY)
+# define THREAD_PINNING_SUPPORTED
+#endif // defined(_WIN32) || defined(USE_PTHREAD_SETAFFINITY)
+
 #include <gsl-lite/gsl-lite.hpp> // for narrow<>(), narrow_cast<>(), span<>
 
 #include <sysmakeshift/thread.hpp>
@@ -690,14 +694,14 @@ detail::thread_pool_handle thread_pool::create(thread_pool::params p)
     p.max_num_hardware_threads = std::max(p.max_num_hardware_threads, hardwareConcurrency);
 
         // Check system support for thread pinning.
-#if !defined(_WIN32) && !defined(USE_PTHREAD_SETAFFINITY)
+#ifndef THREAD_PINNING_SUPPORTED
     if (p.pin_to_hardware_threads)
     {
             // Thread pinning not currently supported on this OS.
         throw std::system_error(std::make_error_code(std::errc::not_supported),
             "pinning to hardware threads is not implemented on this operating system");
     }
-#endif // !defined(_WIN32) && !defined(USE_PTHREAD_SETAFFINITY)
+#endif // !THREAD_PINNING_SUPPORTED
 
     return detail::thread_pool_handle(new detail::thread_pool_impl(p));
 }
