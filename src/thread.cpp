@@ -706,20 +706,22 @@ detail::thread_pool_handle thread_pool::create(thread_pool::params p)
     return detail::thread_pool_handle(new detail::thread_pool_impl(p));
 }
 
-void thread_pool::do_run(std::future<void>* completion, std::function<void(task_context)> action, int concurrency, bool join)
+std::future<void> thread_pool::do_run(std::function<void(task_context)> action, int concurrency, bool join)
 {
+    std::future<void> completion;
     auto& impl = static_cast<detail::thread_pool_impl&>(*handle_.get());
-    impl.schedule_job(join ? nullptr : completion, std::move(action), concurrency, join);
+    impl.schedule_job(join ? nullptr : &completion, std::move(action), concurrency, join);
     if (join)
     {
         auto lhandle = detail::thread_pool_handle(std::move(handle_));
         lhandle.release();
-        impl.close_and_free(completion);
+        impl.close_and_free(&completion);
     }
     else
     {
         impl.launch_threads();
     }
+    return completion;
 }
 
 

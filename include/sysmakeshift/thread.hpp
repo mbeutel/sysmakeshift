@@ -141,7 +141,7 @@ private:
     }
 
     static detail::thread_pool_handle create(thread_pool::params p);
-    void do_run(std::future<void>* completion, std::function<void(task_context)> task, int concurrency, bool join);
+    std::future<void> do_run(std::function<void(task_context)> task, int concurrency, bool join);
 
 public:
     explicit thread_pool(params const& p)
@@ -173,7 +173,7 @@ public:
         gsl_Expects(action);
         gsl_Expects(concurrency >= 0 && concurrency <= handle_->numThreads_);
 
-        do_run(nullptr, std::move(action), concurrency, false);
+        do_run(std::move(action), concurrency, false).wait();
     }
 
         //
@@ -189,7 +189,7 @@ public:
         gsl_Expects(action);
         gsl_Expects(concurrency >= 0 && concurrency <= handle_->numThreads_);
 
-        do_run(nullptr, std::move(action), concurrency, true);
+        do_run(std::move(action), concurrency, true).wait();
     }
 
         //
@@ -206,9 +206,7 @@ public:
         gsl_Expects(action);
         gsl_Expects(concurrency >= 0 && concurrency <= handle_->numThreads_);
 
-        std::future<void> result;
-        do_run(&result, std::move(action), concurrency, false);
-        return result;
+        return do_run(std::move(action), concurrency, false);
     }
 
         //
@@ -225,9 +223,7 @@ public:
         gsl_Expects(action);
         gsl_Expects(concurrency >= 0 && concurrency <= handle_->numThreads_);
 
-        std::future<void> result;
-        do_run(&result, std::move(action), concurrency, true);
-        return result;
+        return do_run(std::move(action), concurrency, true);
     }
 };
 
