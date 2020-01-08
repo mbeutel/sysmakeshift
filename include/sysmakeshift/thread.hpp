@@ -136,7 +136,7 @@ private:
     {
         gsl_Expects(p.num_threads >= 0);
         gsl_Expects(p.max_num_hardware_threads >= 0 && (p.num_threads == 0 || p.max_num_hardware_threads <= p.num_threads));
-        gsl_Expects(p.hardware_thread_mappings.empty() || p.max_num_hardware_threads <= gsl::ssize(p.hardware_thread_mappings));
+        gsl_Expects(p.hardware_thread_mappings.empty() || (p.max_num_hardware_threads <= gsl::ssize(p.hardware_thread_mappings) && p.num_threads <= gsl::ssize(p.hardware_thread_mappings)));
         return p;
     }
 
