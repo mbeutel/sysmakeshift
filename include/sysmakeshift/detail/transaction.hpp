@@ -3,7 +3,7 @@
 #define INCLUDED_SYSMAKESHIFT_DETAIL_TRANSACTION_HPP_
 
 
-#include <utility>     // for move()
+#include <utility>     // for move(), exchange()
 #include <type_traits> // for integral_constant<>
 
 
@@ -38,7 +38,11 @@ public:
         done_ = true;
     }
 
-    transaction_t(transaction_t&&) = delete;
+    constexpr transaction_t(transaction_t&& rhs) // pre-C++17 tax
+        : RollbackFuncT(std::move(rhs)), done_(std::exchange(rhs.done_, true))
+    {
+
+    }
     transaction_t& operator =(transaction_t&&) = delete;
 };
 class no_op_transaction_t
@@ -50,7 +54,7 @@ public:
 
     no_op_transaction_t(void) noexcept = default;
 
-    no_op_transaction_t(no_op_transaction_t&&) = delete;
+    no_op_transaction_t(no_op_transaction_t&&) = default;
     no_op_transaction_t& operator =(no_op_transaction_t&&) = delete;
 };
 template <typename RollbackFuncT>

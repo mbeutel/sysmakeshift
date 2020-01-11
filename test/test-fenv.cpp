@@ -4,6 +4,7 @@
 #include <cfenv>
 #include <cmath>     // for sqrt()
 #include <tuple>
+#include <utility>   // for exchange()
 #include <exception>
 
 #if defined(_MSC_VER)
@@ -45,10 +46,16 @@ public:
     }
     ~ScopedStructuredExceptionTranslator(void) noexcept
     {
-        _set_se_translator(oldTranslator_);
+        if (oldTranslator_ != nullptr)
+        {
+            _set_se_translator(oldTranslator_);
+        }
     }
 
-    ScopedStructuredExceptionTranslator(ScopedStructuredExceptionTranslator&&) = delete;
+    ScopedStructuredExceptionTranslator(ScopedStructuredExceptionTranslator&& rhs) // pre-C++17 tax
+        : oldTranslator_(std::exchange(rhs.oldTranslator_, nullptr))
+    {
+    }
     ScopedStructuredExceptionTranslator& operator =(ScopedStructuredExceptionTranslator&&) = delete;
 };
 
@@ -75,22 +82,30 @@ void fpSignalHandler([[maybe_unused]] int sig)
 #endif
 
 
+template <typename T>
+void discard(T) // pre-C++17 tax
+{
+}
+
 void divBy0(void)
 {
     volatile double zero = 0.;
-    [[maybe_unused]] volatile double x = 1./zero;
+    volatile double x = 1./zero;
+    discard(x);
 }
 
 void inexact(void)
 {
     volatile double ten = 10.;
-    [[maybe_unused]] volatile double x = 1./ten;
+    volatile double x = 1./ten;
+    discard(x);
 }
 
 void invalid(void)
 {
     volatile double minus1 = -1.;
-    [[maybe_unused]] volatile double x = std::sqrt(minus1);
+    volatile double x = std::sqrt(minus1);
+    discard(x);
 }
 
 
@@ -100,11 +115,13 @@ TEST_CASE("set_trapping_fe_exceptions")
     auto scopedExcTranslator = ScopedStructuredExceptionTranslator(translateStructuredExceptionToStdException);
 #endif // _MSC_VER
 
-    auto [excFunc, excCode] = GENERATE(
-        std::tuple{ &divBy0, FE_DIVBYZERO },
-        std::tuple{ &inexact, FE_INEXACT },
-        std::tuple{ &invalid, FE_INVALID }
+    auto excFunc_excCode = GENERATE(
+        std::make_tuple(&divBy0, FE_DIVBYZERO),
+        std::make_tuple(&inexact, FE_INEXACT),
+        std::make_tuple(&invalid, FE_INVALID)
     );
+    auto excFunc = std::get<0>(excFunc_excCode); // pre-C++17 tax
+    auto excCode = std::get<1>(excFunc_excCode);
 
     SECTION("Can detect floating-point exceptions")
     {

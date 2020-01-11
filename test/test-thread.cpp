@@ -40,7 +40,7 @@ TEST_CASE("thread_pool can schedule single task")
     auto action = [&]
     (sysmakeshift::thread_pool::task_context ctx)
     {
-        auto lock = std::unique_lock(mutex);
+        auto lock = std::unique_lock<std::mutex>(mutex);
         threadIds.insert(std::this_thread::get_id());
         threadIndices.insert(ctx.thread_index());
     };
@@ -90,7 +90,7 @@ TEST_CASE("thread_pool can schedule multiple tasks")
     auto action = [&]
     (sysmakeshift::thread_pool::task_context ctx)
     {
-        auto lock = std::unique_lock(mutex);
+        auto lock = std::unique_lock<std::mutex>(mutex);
         ++threadId_Count[std::this_thread::get_id()];
         ++threadIndex_Count[ctx.thread_index()];
     };
