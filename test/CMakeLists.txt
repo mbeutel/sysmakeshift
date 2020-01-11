@@ -24,7 +24,10 @@ add_executable(test-sysmakeshift
     "test-thread.cpp")
 
 # compiler settings
-cmakeshift_target_compile_settings(test-sysmakeshift PRIVATE default)
+cmakeshift_target_compile_settings(test-sysmakeshift
+    PRIVATE
+        default
+        fp-model=strict) # to prevent our fenv tests from being broken by the optimizer
 target_compile_features(test-sysmakeshift PUBLIC cxx_std_14)
 if(MSVC)
     if(CMAKE_CXX_FLAGS MATCHES "/EH[ascr]+")
