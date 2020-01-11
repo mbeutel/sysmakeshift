@@ -7,7 +7,8 @@
 #include <utility>   // for exchange()
 #include <exception>
 
-#if defined(_MSC_VER)
+// Clang doesn't currently implement /EHa properly, cf. https://groups.google.com/forum/#!topic/llvm-dev/ZcNUP_1550M.
+#if defined(_MSC_VER) && !defined(__clang__)
 # include <Windows.h>
 # include <eh.h>      // for _set_se_translator()
 #elif defined(__GNUC__) && defined(__linux__) && !defined(__clang__)
@@ -17,7 +18,7 @@
 #include <catch2/catch.hpp>
 
 
-#if defined(_MSC_VER)
+#if defined(_MSC_VER) && !defined(__clang__)
 class StructuredException : public std::exception
 {
 private:
@@ -111,9 +112,9 @@ void invalid(void)
 
 TEST_CASE("set_trapping_fe_exceptions")
 {
-#ifdef _MSC_VER
+#if defined(_MSC_VER) && !defined(__clang__)
     auto scopedExcTranslator = ScopedStructuredExceptionTranslator(translateStructuredExceptionToStdException);
-#endif // _MSC_VER
+#endif // defined(_MSC_VER) && !defined(__clang__)
 
     auto excFunc_excCode = GENERATE(
         std::make_tuple(&divBy0, FE_DIVBYZERO),
@@ -142,7 +143,7 @@ TEST_CASE("set_trapping_fe_exceptions")
 
     SECTION("Raises exception if flag is set")
     {
-#if defined(_MSC_VER)
+#if defined(_MSC_VER) && !defined(__clang__)
         sysmakeshift::set_trapping_fe_exceptions(excCode);
         CHECK(sysmakeshift::get_trapping_fe_exceptions() == excCode);
         CHECK_THROWS_AS(excFunc(), StructuredException);
