@@ -57,3 +57,4 @@ target_link_libraries(test-sysmakeshift
 
 # register tests
 add_test(NAME test-sysmakeshift COMMAND test-sysmakeshift)
+set_property(TEST test-sysmakeshift PROPERTY FAIL_REGULAR_EXPRESSION "Sanitizer")
