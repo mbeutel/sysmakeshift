@@ -187,7 +187,7 @@ public:
             // Retrieve pointer to actual allocation from end of buffer. Use `memcpy()` so we don't have to worry about alignment.
         void* mem;
         std::memcpy(&mem, reinterpret_cast<char*>(ptr) + nbData, sizeof(void*));
-        
+
         using ByteAllocator = typename std::allocator_traits<A>::template rebind_alloc<char>;
         auto byteAllocator = ByteAllocator(*this); // may not throw
         std::allocator_traits<ByteAllocator>::deallocate(byteAllocator, static_cast<char*>(mem), nbAlloc);

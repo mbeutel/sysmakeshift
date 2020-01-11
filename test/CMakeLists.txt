@@ -12,6 +12,8 @@ find_package(Threads REQUIRED)
 find_package(gsl-lite 0.35.5 REQUIRED)
 find_package(Catch2 2.9 REQUIRED)
 
+include(CMakeshift/TargetCompileSettings)
+
 # test targets
 add_executable(test-sysmakeshift
     "main.cpp"
@@ -22,27 +24,16 @@ add_executable(test-sysmakeshift
     "test-thread.cpp")
 
 # compiler settings
-include(CMakeshift/TargetCompileSettings)
-cmakeshift_target_compile_settings(test-sysmakeshift
-    PRIVATE
-        default
-        fp-model=strict)
-target_compile_features(test-sysmakeshift
-    PUBLIC
-        cxx_std_17)
-
+cmakeshift_target_compile_settings(test-sysmakeshift PRIVATE default)
+target_compile_features(test-sysmakeshift PUBLIC cxx_std_14)
 if(MSVC)
     if(CMAKE_CXX_FLAGS MATCHES "/EH[ascr]+")
         string(REGEX REPLACE "/EH[ascr]+" "" CMAKE_CXX_FLAGS_NEW "${CMAKE_CXX_FLAGS}")
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS_NEW}")
     endif()
-    target_compile_options(test-sysmakeshift
-        PRIVATE
-            /EHa) # needed for calling `_set_se_translator()`
+    target_compile_options(test-sysmakeshift PRIVATE /EHa) # needed for calling `_set_se_translator()`
 elseif(CMAKE_COMPILER_IS_GNUCXX)
-    target_compile_options(test-sysmakeshift
-        PRIVATE
-            -fnon-call-exceptions) # needed to permit throwing exceptions in signal handlers
+    target_compile_options(test-sysmakeshift PRIVATE -fnon-call-exceptions) # needed to permit throwing exceptions in signal handlers
 endif()
 
 # test properties
@@ -50,6 +41,7 @@ target_compile_definitions(test-sysmakeshift
     PRIVATE
         CATCH_CONFIG_CONSOLE_WIDTH=120
         CATCH_CLARA_CONFIG_CONSOLE_WIDTH=120
+        gsl_CONFIG_CONTRACT_CHECKING_AUDIT # run audit-level checks
         gsl_CONFIG_CONTRACT_VIOLATION_THROWS) # this makes gsl-lite's precondition assertions throw `gsl::fail_fast` on failure
 
 # test dependencies

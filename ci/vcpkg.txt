@@ -1,3 +1,0 @@
-cmakeshift
-gsl-lite
-catch2
