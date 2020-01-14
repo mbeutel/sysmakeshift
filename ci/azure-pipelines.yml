@@ -12,15 +12,17 @@ resources:
       type: github
       name: mbeutel/CImakeshift
       endpoint: mbeutel
+      #ref: refs/tags/0.2
 
 jobs:
 - template: azure-pipelines-job-cmake.yml@templates
   parameters:
-    vcpkgRef: e308474b85ff49f2b688a759351c4ec569636910
+    vcpkgRef: bc01338fe2d50f4a24b7f56b53bc385d8de8ccd9
     vcpkgOverlayRepo: 'https://mp-force.ziti.uni-heidelberg.de/asc/infrastructure/vcpkg-ports.git'
-    vcpkgOverlayRef: a08517fb77e9d48d00dd33c16e5acd01f8b31f29
+    vcpkgOverlayRef: a3af41edd36c5a2be17d44f2da0085db11b36331
     vcpkgPackages: ['cmakeshift', 'gsl-lite', 'catch2']
 
+    cmakeBuildConfigurations: [Debug]
     cmakeConfigArgs: '-DSYSMAKESHIFT_BUILD_TESTS=ON'
 
     targets:
@@ -53,7 +55,7 @@ jobs:
 
     - os: Windows
       cxxCompiler: MSVC
-      cxxCompilerVersions: [2017, 2019]
+      cxxCompilerVersions: [19_1, 19_2]
       platforms: [x86, x64]
 
     - os: Windows
