@@ -1,6 +1,6 @@
 # sysmakeshift C++ library
 
-[![Language](https://img.shields.io/badge/language-C%2B%2B17%20%28source%29%20%7C%20C%2B%2B14%20%28headers%29-blue)](https://en.wikipedia.org/wiki/C%2B%2B#Standardization)
+[![Language](https://img.shields.io/badge/language-C%2B%2B17%20%28headers%20C%2B%2B14%29-blue)](https://en.wikipedia.org/wiki/C%2B%2B#Standardization)
  [![License](https://img.shields.io/badge/license-Boost-green)](https://opensource.org/licenses/BSL-1.0)
  [![Build Status](https://dev.azure.com/moritzbeutel/sysmakeshift/_apis/build/status/mbeutel.sysmakeshift?branchName=master)](https://dev.azure.com/moritzbeutel/sysmakeshift/_build/latest?definitionId=3&branchName=master)
  [![Azure DevOps tests](https://img.shields.io/azure-devops/tests/moritzbeutel/sysmakeshift/3)](https://dev.azure.com/moritzbeutel/sysmakeshift/_testManagement/runs)

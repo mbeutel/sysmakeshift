@@ -15,8 +15,9 @@
 #include <condition_variable>
 
 #if defined(_WIN32)
-# define WIN32_LEAN_AND_MEAN
-# define NOMINMAX 
+# ifndef NOMINMAX
+#  define NOMINMAX
+# endif
 # include <Windows.h> // GetLastError(), SetThreadAffinityMask()
 # include <process.h> // _beginthreadex()
 #elif defined(__linux__) || defined(__APPLE__)

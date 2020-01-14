@@ -33,6 +33,35 @@ include(CMakeshift/TargetCompileSettings)
 cmakeshift_target_compile_settings(sysmakeshift
     PRIVATE
         default)
+if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.16)
+    target_precompile_headers(sysmakeshift
+        INTERFACE
+            # C standard library
+            <cstddef>
+            # C++ standard library
+            <new>
+            <memory>
+            <string>
+            <utility>
+            <exception>
+            <algorithm>
+            <type_traits>
+            <system_error>
+            # other libraries
+            <gsl-lite/gsl-lite.hpp>)
+endif()
+
+if(MSVC)
+    target_compile_definitions(sysmakeshift
+        PRIVATE
+            WIN32_LEAN_AND_MEAN
+            NOMINMAX)
+    if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.16)
+        target_precompile_headers(sysmakeshift
+            PRIVATE
+                <Windows.h>)
+    endif()
+endif()
 
 if (NOT MSVC AND CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     # Sized deallocation must be explicitly enabled on Clang, cf. https://bcain-llvm.readthedocs.io/projects/clang/en/release_37/ReleaseNotes/#new-compiler-flags.

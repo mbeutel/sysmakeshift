@@ -27,6 +27,16 @@ jobs:
 
     targets:
 
+    - os: Windows
+      cxxCompiler: MSVC
+      cxxCompilerVersions: [19_1, 19_2]
+      platforms: [x86, x64]
+
+    - os: Windows
+      cxxCompiler: Clang
+      cxxCompilerVersions: [9]
+      platforms: [x86, x64]
+
     - os: Linux
       cxxCompiler: GCC
       cxxCompilerVersions: [7, 8]
@@ -36,9 +46,9 @@ jobs:
       cxxCompiler: GCC
       cxxCompilerVersions: [9]
       platforms: [x64]
-      displayTag: 'sanitize'
+      tag: 'sanitize'
       vcpkgTriplet: <platform>-<os>-sanitize
-      cmakeConfigArgs: '-DCMAKESHIFT_PRIVATE_COMPILE_SETTINGS=runtime-checks;debug-stdlib'
+      cmakeConfigArgs: '<cmakeConfigArgs> -DCMAKESHIFT_PRIVATE_COMPILE_SETTINGS=runtime-checks;debug-stdlib'
 
     - os: Linux
       cxxCompiler: Clang
@@ -49,19 +59,9 @@ jobs:
       cxxCompiler: Clang
       cxxCompilerVersions: [9]
       platforms: [x64]
-      displayTag: 'sanitize'
+      tag: 'sanitize'
       vcpkgTriplet: <platform>-<os>-sanitize
-      cmakeConfigArgs: '-DCMAKESHIFT_PRIVATE_COMPILE_SETTINGS=runtime-checks;debug-stdlib'
-
-    - os: Windows
-      cxxCompiler: MSVC
-      cxxCompilerVersions: [19_1, 19_2]
-      platforms: [x86, x64]
-
-    - os: Windows
-      cxxCompiler: Clang
-      cxxCompilerVersions: [9]
-      platforms: [x86, x64]
+      cmakeConfigArgs: '<cmakeConfigArgs> -DCMAKESHIFT_PRIVATE_COMPILE_SETTINGS=runtime-checks;debug-stdlib'
 
     - os: MacOS
       cxxCompiler: GCC

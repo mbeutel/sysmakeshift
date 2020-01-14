@@ -14,9 +14,16 @@ find_package(Catch2 2.9 REQUIRED)
 
 include(CMakeshift/TargetCompileSettings)
 
+# test runner target
+add_library(test-sysmakeshift-runner OBJECT "main.cpp")
+target_compile_features(test-sysmakeshift-runner PRIVATE cxx_std_14)
+cmakeshift_target_compile_settings(test-sysmakeshift-runner PRIVATE default)
+target_link_libraries(test-sysmakeshift-runner
+    PRIVATE
+        Catch2::Catch2)
+
 # test targets
 add_executable(test-sysmakeshift
-    "main.cpp"
     "test-buffer.cpp"
     "test-fenv.cpp"
     "test-memory.cpp"
@@ -29,12 +36,29 @@ cmakeshift_target_compile_settings(test-sysmakeshift
         default
         fp-model=strict) # to prevent our fenv tests from being broken by the optimizer
 target_compile_features(test-sysmakeshift PUBLIC cxx_std_14)
+if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.16)
+    target_precompile_headers(sysmakeshift
+        INTERFACE
+            # C standard library
+            <cstddef>
+            # C++ standard library
+            <new>
+            <memory>
+            <string>
+            <utility>
+            <exception>
+            <algorithm>
+            <type_traits>
+            <system_error>
+            # other libraries
+            <gsl-lite/gsl-lite.hpp>
+            <catch2/catch.hpp>)
+endif()
 if(MSVC)
     if(CMAKE_CXX_FLAGS MATCHES "/EH[ascr]+")
         string(REGEX REPLACE "/EH[ascr]+" "" CMAKE_CXX_FLAGS_NEW "${CMAKE_CXX_FLAGS}")
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS_NEW}")
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS_NEW} /EHa") # /EHa needed for calling `_set_se_translator()`
     endif()
-    target_compile_options(test-sysmakeshift PRIVATE /EHa) # needed for calling `_set_se_translator()`
 elseif(CMAKE_COMPILER_IS_GNUCXX)
     target_compile_options(test-sysmakeshift PRIVATE -fnon-call-exceptions) # needed to permit throwing exceptions in signal handlers
 endif()
@@ -53,7 +77,8 @@ target_link_libraries(test-sysmakeshift
         Threads::Threads
         gsl::gsl-lite-v1
         Catch2::Catch2
-        sysmakeshift)
+        sysmakeshift
+        test-sysmakeshift-runner)
 
 # register tests
 add_test(NAME test-sysmakeshift COMMAND test-sysmakeshift)
