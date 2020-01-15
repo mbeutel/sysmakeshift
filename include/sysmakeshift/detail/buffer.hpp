@@ -124,7 +124,7 @@ noexcept
     {
         for (std::ptrdiff_t j = 0; j != ncols; ++j)
         {
-            std::allocator_traits<A>::construct(alloc, reinterpret_cast<T*>(&data[i + j]), args...);
+            std::allocator_traits<A>::construct(alloc, reinterpret_cast<T*>(&data[i + j * sizeof(T)]), args...);
         }
     }
     numElementsConstructed = rows * cols;
@@ -140,7 +140,7 @@ construct_aligned_row_buffer(char* data, A alloc, std::size_t& numElementsConstr
     {
         for (std::ptrdiff_t j = 0; j != ncols; ++j)
         {
-            std::allocator_traits<A>::construct(alloc, reinterpret_cast<T*>(&data[i + j]), args...);
+            std::allocator_traits<A>::construct(alloc, reinterpret_cast<T*>(&data[i + j * sizeof(T)]), args...);
             ++numElementsConstructed;
         }
     }
@@ -155,7 +155,7 @@ noexcept
     {
         for (std::ptrdiff_t j = 0; j != ncols; ++j)
         {
-            std::allocator_traits<A>::destroy(alloc, reinterpret_cast<T*>(&data[i + j]));
+            std::allocator_traits<A>::destroy(alloc, reinterpret_cast<T*>(&data[i + j * sizeof(T)]));
         }
     }
 }
@@ -170,7 +170,7 @@ noexcept
         {
             if (numElementsConstructed == 0) return;
             --numElementsConstructed;
-            std::allocator_traits<A>::destroy(alloc, reinterpret_cast<T*>(&data[i + j]));
+            std::allocator_traits<A>::destroy(alloc, reinterpret_cast<T*>(&data[i + j * sizeof(T)]));
         }
     }
 }
