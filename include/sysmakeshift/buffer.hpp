@@ -51,7 +51,7 @@ private:
 
     static std::size_t computeBytesPerElement(void)
     {
-        auto bytesPerElementR = detail::ceili(sizeof(T), detail::alignment_in_bytes(Alignment));
+        auto bytesPerElementR = detail::ceili(sizeof(T), detail::alignment_in_bytes(Alignment | alignment(alignof(T))));
         if (bytesPerElementR.ec != std::errc{ }) throw std::bad_alloc{ };
         return bytesPerElementR.value;
     }
@@ -270,7 +270,7 @@ private:
         : allocator_type(std::move(_allocator)), rows_(_rows), cols_(_cols)
     {
         auto rawBytesPerRowR = detail::multiply_unsigned(sizeof(T), _cols);
-        auto bytesPerRowR = detail::ceili(rawBytesPerRowR.value, detail::alignment_in_bytes(Alignment));
+        auto bytesPerRowR = detail::ceili(rawBytesPerRowR.value, detail::alignment_in_bytes(Alignment | alignment(alignof(T))));
         auto numBytesR = detail::multiply_unsigned(_rows, bytesPerRowR.value);
         if (rawBytesPerRowR.ec != std::errc{ } || bytesPerRowR.ec != std::errc{ } || numBytesR.ec != std::errc{ }) throw std::bad_alloc{ };
         bytesPerRow_ = bytesPerRowR.value;
