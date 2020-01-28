@@ -21,7 +21,8 @@ add_library(sysmakeshift STATIC
 # library properties
 target_include_directories(sysmakeshift
     PUBLIC
-        "$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>")
+        "$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>"
+        "$<INSTALL_INTERFACE:include>")
 target_compile_features(sysmakeshift
     INTERFACE
         cxx_std_14
