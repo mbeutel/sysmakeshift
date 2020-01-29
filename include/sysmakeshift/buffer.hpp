@@ -12,7 +12,7 @@
 
 #include <gsl-lite/gsl-lite.hpp> // for gsl_Expects(), owner<>, span<>, negation<>, gsl_NODISCARD, gsl_CPP17_OR_GREATER
 
-#include <sysmakeshift/memory.hpp> // for alignment, aligned_allocator<>
+#include <sysmakeshift/memory.hpp> // for aligned_allocator_adaptor<>
 
 #include <sysmakeshift/detail/buffer.hpp>
 #include <sysmakeshift/detail/transaction.hpp>
@@ -28,24 +28,26 @@ namespace gsl = ::gsl_lite;
     //
     // Buffer with aligned elements.
     //ᅟ
-    //ᅟ    auto threadData = aligned_buffer<ThreadData, alignment::cache_line>(numThreads);
+    //ᅟ    auto threadData = aligned_buffer<ThreadData, cache_line_alignment>(numThreads);
     //ᅟ    // every `threadData[i]` has cache-line alignment => no false sharing
+    //ᅟ
+    // Supports special alignment values such as `cache_line_alignment`.
+    // Multiple alignment requirements can be combined using bitmask operations, e.g. `cache_line_alignment | alignof(T)`.
     //
-template <typename T, alignment Alignment, typename A = std::allocator<T>>
-class aligned_buffer : private aligned_allocator<T, Alignment | alignment(alignof(T)), A>
+template <typename T, std::size_t Alignment, typename A = std::allocator<T>>
+class aligned_buffer : private aligned_allocator_adaptor<T, Alignment | alignof(T), A>
 {
     static_assert(!std::is_const<T>::value && !std::is_volatile<T>::value, "buffer element type must not have cv qualifiers");
     static_assert(!std::is_reference<T>::value, "buffer element type must not be a reference");
 
     struct internal_constructor { };
 
-    template <typename A2> using allocator_ = aligned_allocator<T, Alignment | alignment(alignof(T)), A2>;
-
 public:
-    using allocator_type = allocator_<A>;
+    using allocator_type = aligned_allocator_adaptor<T, Alignment | alignof(T), A>;
 
 private:
     using byte_allocator_ = typename std::allocator_traits<allocator_type>::template rebind_alloc<char>;
+    static constexpr bool allocator_is_default_constructible_ = std::is_default_constructible<allocator_type>::value;
 
     gsl::owner<char*> data_;
     std::size_t size_; // # elements
@@ -53,7 +55,7 @@ private:
 
     static std::size_t computeBytesPerElement(void)
     {
-        auto bytesPerElementR = detail::ceili(sizeof(T), detail::alignment_in_bytes(Alignment | alignment(alignof(T))));
+        auto bytesPerElementR = detail::ceili(sizeof(T), detail::alignment_in_bytes(Alignment | alignof(T)));
         if (bytesPerElementR.ec != std::errc{ }) throw std::bad_alloc{ };
         return bytesPerElementR.value;
     }
@@ -107,7 +109,7 @@ public:
     using iterator = detail::aligned_buffer_iterator<T>;
     using const_iterator = detail::aligned_buffer_iterator<T const>;
 
-    template <typename A2 = A, std::enable_if_t<std::is_default_constructible<allocator_<A2>>::value, int> = 0>
+    template <typename U = int, std::enable_if_t<allocator_is_default_constructible_, U> = 0>
     constexpr aligned_buffer(void) noexcept
         : allocator_type{ }, data_(nullptr), size_(0), bytesPerElement_(0)
     {
@@ -116,12 +118,12 @@ public:
         : allocator_type(std::move(_alloc)), data_(nullptr), size_(0), bytesPerElement_(0)
     {
     }
-    template <typename A2 = A, std::enable_if_t<std::is_default_constructible<allocator_<A2>>::value, int> = 0>
+    template <typename U = int, std::enable_if_t<allocator_is_default_constructible_, U> = 0>
     explicit aligned_buffer(std::size_t _size)
         : aligned_buffer(internal_constructor{ }, _size, { })
     {
     }
-    template <typename A2 = A, std::enable_if_t<std::is_default_constructible<allocator_<A2>>::value, int> = 0>
+    template <typename U = int, std::enable_if_t<allocator_is_default_constructible_, U> = 0>
     explicit aligned_buffer(std::size_t _size, T const& _value)
         : aligned_buffer(internal_constructor{ }, _size, { }, _value)
     {
@@ -136,7 +138,7 @@ public:
     }
 #if gsl_CPP17_OR_GREATER
     template <typename... Ts,
-              typename A2 = A, std::enable_if_t<std::is_default_constructible<allocator_<A2>>::value, int> = 0>
+              typename U = int, std::enable_if_t<allocator_is_default_constructible_, U> = 0>
     explicit aligned_buffer(std::size_t _size, std::in_place_t, Ts&&... _args)
         : aligned_buffer(internal_constructor{ }, _size, { }, std::forward<Ts>(_args)...)
     {
@@ -245,24 +247,26 @@ public:
     //
     // Two-dimensional buffer with aligned rows.
     //ᅟ
-    //ᅟ    auto threadData = aligned_row_buffer<float, alignment::cache_line>(rows, cols);
+    //ᅟ    auto threadData = aligned_row_buffer<float, cache_line_alignment>(rows, cols);
     //ᅟ    // every `threadData[i][0]` has cache-line alignment => no false sharing
+    //ᅟ
+    // Supports special alignment values such as `cache_line_alignment`.
+    // Multiple alignment requirements can be combined using bitmask operations, e.g. `cache_line_alignment | alignof(T)`.
     //
-template <typename T, alignment Alignment, typename A = std::allocator<T>>
-class aligned_row_buffer : private aligned_allocator<T, Alignment | alignment(alignof(T)), A>
+template <typename T, std::size_t Alignment, typename A = std::allocator<T>>
+class aligned_row_buffer : private aligned_allocator_adaptor<T, Alignment | alignof(T), A>
 {
     static_assert(!std::is_const<T>::value && !std::is_volatile<T>::value, "buffer element type must not have cv qualifiers");
     static_assert(!std::is_reference<T>::value, "buffer element type must not be a reference");
 
     struct internal_constructor { };
 
-    template <typename A2> using allocator_ = aligned_allocator<T, Alignment | alignment(alignof(T)), A2>;
-
 public:
-    using allocator_type = allocator_<A>;
+    using allocator_type = aligned_allocator_adaptor<T, Alignment | alignof(T), A>;
 
 private:
     using byte_allocator_ = typename std::allocator_traits<allocator_type>::template rebind_alloc<char>;
+    static constexpr bool allocator_is_default_constructible_ = std::is_default_constructible<allocator_type>::value;
 
     gsl::owner<char*> data_;
     std::size_t rows_;
@@ -274,7 +278,7 @@ private:
         : allocator_type(std::move(_allocator)), rows_(_rows), cols_(_cols)
     {
         auto rawBytesPerRowR = detail::multiply_unsigned(sizeof(T), _cols);
-        auto bytesPerRowR = detail::ceili(rawBytesPerRowR.value, detail::alignment_in_bytes(Alignment | alignment(alignof(T))));
+        auto bytesPerRowR = detail::ceili(rawBytesPerRowR.value, detail::alignment_in_bytes(Alignment | alignof(T)));
         auto numBytesR = detail::multiply_unsigned(_rows, bytesPerRowR.value);
         if (rawBytesPerRowR.ec != std::errc{ } || bytesPerRowR.ec != std::errc{ } || numBytesR.ec != std::errc{ }) throw std::bad_alloc{ };
         bytesPerRow_ = bytesPerRowR.value;
@@ -317,7 +321,7 @@ public:
     using iterator = detail::aligned_row_buffer_iterator<T>;
     using const_iterator = detail::aligned_row_buffer_iterator<T const>;
 
-    template <typename A2 = A, std::enable_if_t<std::is_default_constructible<allocator_<A2>>::value, int> = 0>
+    template <typename U = int, std::enable_if_t<allocator_is_default_constructible_, U> = 0>
     aligned_row_buffer(void) noexcept
         : allocator_type{ }, data_(nullptr), rows_(0), cols_(0), bytesPerRow_(0)
     {
@@ -326,12 +330,12 @@ public:
         : allocator_type(std::move(_alloc)), data_(nullptr), rows_(0), cols_(0), bytesPerRow_(0)
     {
     }
-    template <typename A2 = A, std::enable_if_t<std::is_default_constructible<allocator_<A2>>::value, int> = 0>
+    template <typename U = int, std::enable_if_t<allocator_is_default_constructible_, U> = 0>
     explicit aligned_row_buffer(std::size_t _rows, std::size_t _cols)
         : aligned_row_buffer(internal_constructor{ }, _rows, _cols, { })
     {
     }
-    template <typename A2 = A, std::enable_if_t<std::is_default_constructible<allocator_<A2>>::value, int> = 0>
+    template <typename U = int, std::enable_if_t<allocator_is_default_constructible_, U> = 0>
     explicit aligned_row_buffer(std::size_t _rows, std::size_t _cols, T const& _value)
         : aligned_row_buffer(internal_constructor{ }, _rows, _cols, { }, _value)
     {
@@ -346,7 +350,7 @@ public:
     }
 #if gsl_CPP17_OR_GREATER
     template <typename... Ts,
-              typename A2 = A, std::enable_if_t<std::is_default_constructible<allocator_<A2>>::value, int> = 0>
+              typename U = int, std::enable_if_t<allocator_is_default_constructible_, U> = 0>
     explicit aligned_row_buffer(std::size_t _rows, std::size_t _cols, std::in_place_t, Ts&&... _args)
         : aligned_row_buffer(internal_constructor{ }, _rows, _cols, { }, std::forward<Ts>(_args)...)
     {

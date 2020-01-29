@@ -14,6 +14,8 @@ namespace detail
 {
 
 
+    // TODO: Should this be in gsl-lite? B. Stroustrup rightfully claims that `on_success()`, `on_error()`, and `finally()` are the elementary operations here, but
+    //       calling `uncaught_exceptions()` does have a cost, so maybe a transaction is still a useful thing.
 template <typename RollbackFuncT>
 class transaction_t : private RollbackFuncT
 {

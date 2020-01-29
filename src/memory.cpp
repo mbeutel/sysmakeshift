@@ -46,30 +46,30 @@ static std::size_t floor_2p(std::size_t x)
     return (x + 1) >> 1; // assumes that x < powi(2, sizeof(std::size_t) * 8 - 1), which is given because the most significant bits have special meaning and have been masked out
 }
 
-alignment lookup_special_alignments(alignment a) noexcept
+std::size_t lookup_special_alignments(std::size_t a) noexcept
 {
-    if ((a & alignment::large_page) != alignment{ })
+    if ((a & large_page_alignment) != 0)
     {
             // This is without effect if `hardware_large_page_size()` returns 0, i.e. if large pages are not supported.
-        a |= alignment(hardware_large_page_size());
+        a |= hardware_large_page_size();
     }
-    if ((a & alignment::page) != alignment{ })
+    if ((a & page_alignment) != 0)
     {
-        a |= alignment(hardware_page_size());
+        a |= hardware_page_size();
     }
-    if ((a & alignment::cache_line) != alignment{ })
+    if ((a & cache_line_alignment) != 0)
     {
-        a |= alignment(hardware_cache_line_size());
+        a |= hardware_cache_line_size();
     }
 
         // Mask out flags with special meaning.
-    a &= ~(alignment::large_page | alignment::page | alignment::cache_line);
+    a &= ~(large_page_alignment | page_alignment | cache_line_alignment);
 
     return a;
 }
-std::size_t alignment_in_bytes(alignment a) noexcept
+std::size_t alignment_in_bytes(std::size_t a) noexcept
 {
-    return std::max(std::size_t(1), floor_2p(std::size_t(lookup_special_alignments(a))));
+    return std::max(std::size_t(1), floor_2p(lookup_special_alignments(a)));
 }
 
 

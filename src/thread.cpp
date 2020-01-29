@@ -394,7 +394,7 @@ private:
 
     barrier barrier_;
     std::promise<std::optional<thread_pool_job>> nextJob_;
-    aligned_buffer<thread_pool_thread, alignment::cache_line> data_;
+    aligned_buffer<thread_pool_thread, cache_line_alignment> data_;
 #ifdef _WIN32
     unsigned threadPoolId_; // for runtime thread identification during debugging
 #endif // _WIN32

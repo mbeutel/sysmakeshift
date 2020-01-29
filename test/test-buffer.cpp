@@ -14,7 +14,7 @@ namespace gsl = ::gsl_lite;
 
 TEST_CASE("aligned_buffer<> properly aligns elements")
 {
-    constexpr auto alignment = sysmakeshift::alignment(4 * sizeof(int));
+    constexpr std::size_t alignment = 4 * sizeof(int);
     std::size_t numElements = GENERATE(range(0, 9));
 
     auto bufNI = sysmakeshift::aligned_buffer<int, alignment>(numElements);
@@ -29,7 +29,7 @@ TEST_CASE("aligned_buffer<> properly aligns elements")
 
 TEST_CASE("aligned_row_buffer<> properly aligns elements")
 {
-    constexpr auto alignment = sysmakeshift::alignment(4 * sizeof(int));
+    constexpr std::size_t alignment = 4 * sizeof(int);
     std::size_t numRows = GENERATE(range(0, 2));
     std::size_t numCols = GENERATE(range(0, 9));
 

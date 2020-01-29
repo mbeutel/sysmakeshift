@@ -12,8 +12,6 @@
 
 #include <gsl-lite/gsl-lite.hpp> // for gsl_Expects()
 
-#include <sysmakeshift/memory.hpp> // for alignment
-
 
 namespace sysmakeshift
 {
@@ -22,10 +20,10 @@ namespace sysmakeshift
 namespace gsl = ::gsl_lite;
 
 
-template <typename T, alignment Alignment, typename A>
+template <typename T, std::size_t Alignment, typename A>
 class aligned_buffer;
 
-template <typename T, alignment Alignment, typename A>
+template <typename T, std::size_t Alignment, typename A>
 class aligned_row_buffer;
 
 
@@ -179,7 +177,7 @@ noexcept
 template <typename T>
 class aligned_buffer_iterator
 {
-    template <typename, alignment, typename> friend class sysmakeshift::aligned_buffer;
+    template <typename, std::size_t, typename> friend class sysmakeshift::aligned_buffer;
 
 private:
     char* data_;
@@ -324,7 +322,7 @@ struct input_output_iterator_tag : std::input_iterator_tag, std::output_iterator
 template <typename T>
 class aligned_row_buffer_iterator
 {
-    template <typename, alignment, typename> friend class sysmakeshift::aligned_row_buffer;
+    template <typename, std::size_t, typename> friend class sysmakeshift::aligned_row_buffer;
 
 private:
     char* data_;

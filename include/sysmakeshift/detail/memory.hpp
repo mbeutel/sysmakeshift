@@ -21,9 +21,6 @@ namespace sysmakeshift
 namespace gsl = ::gsl_lite;
 
 
-enum class alignment : std::size_t;
-
-
 namespace detail
 {
 
@@ -39,7 +36,7 @@ template <typename T, std::ptrdiff_t N> struct extent_only<T[N]> : std::integral
 template <typename T> constexpr std::ptrdiff_t extent_only_v = extent_only<T>::value;
 
 template <typename A, typename = void> struct has_member_provides_static_alignment : std::false_type { };
-template <typename A> struct has_member_provides_static_alignment<A, gsl::void_t<decltype(A::provides_static_alignment(std::declval<alignment>()))>> : std::is_convertible<decltype(A::provides_static_alignment(std::declval<alignment>())), bool> { };
+template <typename A> struct has_member_provides_static_alignment<A, gsl::void_t<decltype(A::provides_static_alignment(std::declval<std::size_t>()))>> : std::is_convertible<decltype(A::provides_static_alignment(std::declval<std::size_t>())), bool> { };
 
 
 template <typename U>
@@ -53,25 +50,25 @@ constexpr int bit_scan_reverse(U mask)
     return result;
 }
 
-constexpr std::size_t special_alignments = std::numeric_limits<std::size_t>::max() & ~(std::numeric_limits<std::size_t>::max() >> 3); // = std::size_t(alignment::large_page | alignment::page | alignment::cache_line)
+constexpr std::size_t special_alignments = std::numeric_limits<std::size_t>::max() & ~(std::numeric_limits<std::size_t>::max() >> 3); // = large_page_alignment | page_alignment | cache_line_alignment
 
-constexpr bool provides_static_alignment(alignment alignmentProvided, alignment alignmentRequested) noexcept
+constexpr bool provides_static_alignment(std::size_t alignmentProvided, std::size_t alignmentRequested) noexcept
 {
-    std::size_t highestAlignmentProvided = std::size_t(1) << std::size_t(detail::bit_scan_reverse(std::size_t(alignmentProvided) & ~special_alignments)); // only most significant bit
-    std::size_t allAlignmentsProvided = std::size_t(alignmentProvided) | (highestAlignmentProvided - 1);
-    return (std::size_t(alignmentRequested) & allAlignmentsProvided) == std::size_t(alignmentRequested);
+    std::size_t highestAlignmentProvided = std::size_t(1) << std::size_t(detail::bit_scan_reverse(alignmentProvided & ~special_alignments)); // only most significant bit
+    std::size_t allAlignmentsProvided = alignmentProvided | (highestAlignmentProvided - 1);
+    return (alignmentRequested & allAlignmentsProvided) == alignmentRequested;
 }
 
 
-alignment lookup_special_alignments(alignment a) noexcept;
+std::size_t lookup_special_alignments(std::size_t a) noexcept;
 
-inline bool provides_dynamic_alignment(alignment alignmentProvided, alignment alignmentRequested) noexcept
+inline bool provides_dynamic_alignment(std::size_t alignmentProvided, std::size_t alignmentRequested) noexcept
 {
     alignmentProvided = detail::lookup_special_alignments(alignmentProvided);
     alignmentRequested = detail::lookup_special_alignments(alignmentRequested);
-    std::size_t highestAlignmentProvided = std::size_t(1) << std::size_t(detail::bit_scan_reverse(std::size_t(alignmentProvided))); // only most significant bit
-    std::size_t allAlignmentsProvided = std::size_t(alignmentProvided) | (highestAlignmentProvided - 1);
-    return (std::size_t(alignmentRequested) & allAlignmentsProvided) == std::size_t(alignmentRequested);
+    std::size_t highestAlignmentProvided = std::size_t(1) << std::size_t(detail::bit_scan_reverse(alignmentProvided)); // only most significant bit
+    std::size_t allAlignmentsProvided = alignmentProvided | (highestAlignmentProvided - 1);
+    return (alignmentRequested & allAlignmentsProvided) == alignmentRequested;
 }
 
 
@@ -135,7 +132,7 @@ void aligned_free(void* data, std::size_t size, std::size_t alignment) noexcept;
 //void advise_large_pages(void* addr, std::size_t size);
 //#endif // __linux__
 
-std::size_t alignment_in_bytes(alignment a) noexcept;
+std::size_t alignment_in_bytes(std::size_t a) noexcept;
 
 template <typename T>
 constexpr bool is_alignment_power_of_2(T value) noexcept
@@ -145,22 +142,22 @@ constexpr bool is_alignment_power_of_2(T value) noexcept
 }
 
 
-template <typename T, alignment Alignment, typename A, bool NeedAlignment>
-class aligned_allocator_base;
-template <typename T, alignment Alignment, typename A>
-class aligned_allocator_base<T, Alignment, A, true> : public A
+template <typename T, std::size_t Alignment, typename A, bool NeedAlignment>
+class aligned_allocator_adaptor_base;
+template <typename T, std::size_t Alignment, typename A>
+class aligned_allocator_adaptor_base<T, Alignment, A, true> : public A
 {
 public:
     using A::A;
 
-    gsl_NODISCARD static constexpr bool provides_static_alignment(alignment a) noexcept
+    gsl_NODISCARD static constexpr bool provides_static_alignment(std::size_t a) noexcept
     {
         return detail::provides_static_alignment(Alignment, a);
     }
 
     gsl_NODISCARD T* allocate(std::size_t n)
     {
-        std::size_t a = detail::alignment_in_bytes(alignment(std::size_t(Alignment) | alignof(T)));
+        std::size_t a = detail::alignment_in_bytes(Alignment | alignof(T));
         if (n >= std::numeric_limits<std::size_t>::max() / sizeof(T)) throw std::bad_alloc{ }; // overflow
         std::size_t nbData = n * sizeof(T);
         std::size_t nbAlloc = nbData + a + sizeof(void*) - 1;
@@ -180,9 +177,9 @@ public:
     }
     void deallocate(T* ptr, std::size_t n) noexcept
     {
-        std::size_t a = detail::alignment_in_bytes(alignment(std::size_t(Alignment) | alignof(T)));
-        std::size_t nbData = n * sizeof(T); // cannot overflow due to preceding check in allocate()
-        std::size_t nbAlloc = nbData + a + sizeof(void*) - 1; // cannot overflow due to preceding check in allocate()
+        std::size_t a = detail::alignment_in_bytes(Alignment | alignof(T));
+        std::size_t nbData = n * sizeof(T); // cannot overflow due to preceding check in `allocate()`
+        std::size_t nbAlloc = nbData + a + sizeof(void*) - 1; // cannot overflow due to preceding check in `allocate()`
 
             // Retrieve pointer to actual allocation from end of buffer. Use `memcpy()` so we don't have to worry about alignment.
         void* mem;
@@ -193,8 +190,8 @@ public:
         std::allocator_traits<ByteAllocator>::deallocate(byteAllocator, static_cast<char*>(mem), nbAlloc);
     }
 };
-template <typename T, alignment Alignment, typename A>
-class aligned_allocator_base<T, Alignment, A, false> : public A
+template <typename T, std::size_t Alignment, typename A>
+class aligned_allocator_adaptor_base<T, Alignment, A, false> : public A
 {
 public:
     using A::A;

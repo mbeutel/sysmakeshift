@@ -12,7 +12,7 @@
 #include <utility>     // for forward<>()
 #include <type_traits> // for is_nothrow_default_constructible<>, enable_if<>, is_same<>, remove_cv<>
 
-#include <gsl-lite/gsl-lite.hpp> // for gsl_DEFINE_ENUM_BITMASK_OPERATORS(), gsl_Expects(), gsl_NODISCARD
+#include <gsl-lite/gsl-lite.hpp> // for gsl_Expects(), gsl_NODISCARD
 
 #include <sysmakeshift/detail/memory.hpp>
 #include <sysmakeshift/detail/type_traits.hpp> // for can_instantiate<>
@@ -99,31 +99,28 @@ gsl_NODISCARD bool operator !=(zero_init_allocator<T> const& x, zero_init_alloca
 
 
     //
-    // Represents an alignment to use for aligned allocations.
-    //ᅟ
-    // In addition to the special alignment values, any positive integer that is a power of 2 may be cast to `alignment`.
-    // Multiple alignment requirements can be combined using bitmask operations, e.g. `alignment::cache_line | alignment(alignof(T))`.
+    // Special alignment value representing the alignment of large pages.
     //
-enum class alignment : std::size_t
-{
-    large_page =  std::numeric_limits<std::size_t>::max() & ~(std::numeric_limits<std::size_t>::max() >> 1),
-    page       = (std::numeric_limits<std::size_t>::max() & ~(std::numeric_limits<std::size_t>::max() >> 1)) >> 1,
-    cache_line = (std::numeric_limits<std::size_t>::max() & ~(std::numeric_limits<std::size_t>::max() >> 1)) >> 2,
+constexpr std::size_t large_page_alignment =  std::numeric_limits<std::size_t>::max() & ~(std::numeric_limits<std::size_t>::max() >> 1);
 
-    special_alignments = large_page | page | cache_line,
+    //
+    // Special alignment value representing the alignment of pages.
+    //
+constexpr std::size_t page_alignment       = (std::numeric_limits<std::size_t>::max() & ~(std::numeric_limits<std::size_t>::max() >> 1)) >> 1;
 
-    none = 0
-};
-gsl_DEFINE_ENUM_BITMASK_OPERATORS(alignment)
+    //
+    // Special alignment value representing the alignment of cache lines.
+    //
+constexpr std::size_t cache_line_alignment = (std::numeric_limits<std::size_t>::max() & ~(std::numeric_limits<std::size_t>::max() >> 1)) >> 2;
 
 
     //
     // Computes whether the provided alignment satisfies the requested alignment.
     //ᅟ
-    // The alignments corresponding to the special alignment values `alignment::large_page`, `alignment::page`, and `alignment::cache_line` are not known until runtime,
+    // The alignments corresponding to the special alignment values `large_page_alignment`, `page_alignment`, and `cache_line_alignment` are not known until runtime,
     // hence to satisfy a requested special alignment it must be provided explicitly by the provided alignment.
     //
-constexpr bool provides_static_alignment(alignment alignmentProvided, alignment alignmentRequested) noexcept
+constexpr bool provides_static_alignment(std::size_t alignmentProvided, std::size_t alignmentRequested) noexcept
 {
     return detail::provides_static_alignment(alignmentProvided, alignmentRequested);
 }
@@ -131,9 +128,9 @@ constexpr bool provides_static_alignment(alignment alignmentProvided, alignment 
     //
     // Computes whether the provided alignment satisfies the requested alignment.
     //ᅟ
-    // Looks up the alignments corresponding to the special alignment values `alignment::large_page`, `alignment::page`, and `alignment::cache_line`.
+    // Looks up the alignments corresponding to the special alignment values `large_page_alignment`, `page_alignment`, and `cache_line_alignment`.
     //
-inline bool provides_dynamic_alignment(alignment alignmentProvided, alignment alignmentRequested) noexcept
+inline bool provides_dynamic_alignment(std::size_t alignmentProvided, std::size_t alignmentRequested) noexcept
 {
     return detail::provides_dynamic_alignment(alignmentProvided, alignmentRequested);
 }
@@ -146,17 +143,17 @@ template <typename A>
 struct aligned_allocator_traits
 {
 private:
-    static constexpr bool provides_static_alignment_impl(alignment a, std::false_type /*hasMember*/)
+    static constexpr bool provides_static_alignment_impl(std::size_t a, std::false_type /*hasMember*/)
     {
-        return sysmakeshift::provides_static_alignment(alignment(alignof(std::max_align_t)), a);
+        return sysmakeshift::provides_static_alignment(alignof(std::max_align_t), a);
     }
-    static constexpr bool provides_static_alignment_impl(alignment a, std::true_type /*hasMember*/)
+    static constexpr bool provides_static_alignment_impl(std::size_t a, std::true_type /*hasMember*/)
     {
         return A::provides_static_alignment(a);
     }
 
 public:
-    gsl_NODISCARD static constexpr bool provides_static_alignment(alignment a) noexcept
+    gsl_NODISCARD static constexpr bool provides_static_alignment(std::size_t a) noexcept
     {
         return provides_static_alignment_impl(a, detail::has_member_provides_static_alignment<A>{ });
     }
@@ -164,10 +161,13 @@ public:
 
 
     //
-    // Allocator that aligns memory allocations by the given size using the default allocator, i.e. global `operator new()` with `std::align_val_t`.
+    // Allocator that aligns memory allocations for the given alignment using the default allocator, i.e. global `operator new()` with `std::align_val_t`.
+    //ᅟ
+    // Supports special alignment values such as `cache_line_alignment`.
+    // Multiple alignment requirements can be combined using bitmask operations, e.g. `cache_line_alignment | alignof(T)`.
     //
-template <typename T, alignment Alignment>
-class aligned_default_allocator
+template <typename T, std::size_t Alignment>
+class aligned_allocator
 {
 public:
     using value_type = T;
@@ -175,56 +175,59 @@ public:
     template <typename U>
     struct rebind
     {
-        using other = aligned_default_allocator<U, Alignment>;
+        using other = aligned_allocator<U, Alignment>;
     };
 
-    constexpr aligned_default_allocator(void) noexcept
+    constexpr aligned_allocator(void) noexcept
     {
     }
     template <typename U>
-    constexpr aligned_default_allocator(aligned_default_allocator<U, Alignment> const&) noexcept
+    constexpr aligned_allocator(aligned_allocator<U, Alignment> const&) noexcept
     {
     }
 
-    gsl_NODISCARD static constexpr bool provides_static_alignment(alignment a) noexcept
+    gsl_NODISCARD static constexpr bool provides_static_alignment(std::size_t a) noexcept
     {
         return sysmakeshift::provides_static_alignment(Alignment, a);
     }
 
     gsl_NODISCARD T* allocate(std::size_t n)
     {
-        std::size_t a = detail::alignment_in_bytes(Alignment | alignment(alignof(T)));
+        std::size_t a = detail::alignment_in_bytes(Alignment | alignof(T));
         if (n >= std::numeric_limits<std::size_t>::max() / sizeof(T)) throw std::bad_alloc{ }; // overflow
         std::size_t nbData = n * sizeof(T);
         return static_cast<T*>(detail::aligned_alloc(nbData, a));
     }
     void deallocate(T* ptr, std::size_t n) noexcept
     {
-        std::size_t a = detail::alignment_in_bytes(Alignment | alignment(alignof(T)));
+        std::size_t a = detail::alignment_in_bytes(Alignment | alignof(T));
         std::size_t nbData = n * sizeof(T); // cannot overflow due to preceding check in allocate()
         detail::aligned_free(ptr, nbData, a);
     }
 };
 
-template <typename T, typename U, alignment Alignment>
-gsl_NODISCARD bool operator ==(aligned_default_allocator<T, Alignment>, aligned_default_allocator<U, Alignment>) noexcept
+template <typename T, typename U, std::size_t Alignment>
+gsl_NODISCARD bool operator ==(aligned_allocator<T, Alignment>, aligned_allocator<U, Alignment>) noexcept
 {
     return true;
 }
-template <typename T, typename U, alignment Alignment>
-gsl_NODISCARD bool operator !=(aligned_default_allocator<T, Alignment> x, aligned_default_allocator<U, Alignment> y) noexcept
+template <typename T, typename U, std::size_t Alignment>
+gsl_NODISCARD bool operator !=(aligned_allocator<T, Alignment> x, aligned_allocator<U, Alignment> y) noexcept
 {
     return !(x == y);
 }
 
 
     //
-    // Allocator adaptor that aligns memory allocations by the given size.
+    // Allocator adaptor that aligns memory allocations for the given alignment.
+    //ᅟ
+    // Supports special alignment values such as `cache_line_alignment`.
+    // Multiple alignment requirements can be combined using bitmask operations, e.g. `cache_line_alignment | alignof(T)`.
     //
-template <typename T, alignment Alignment, typename A>
-class aligned_allocator : public detail::aligned_allocator_base<T, Alignment, A, !aligned_allocator_traits<A>::provides_static_alignment(Alignment)>
+template <typename T, std::size_t Alignment, typename A>
+class aligned_allocator_adaptor : public detail::aligned_allocator_adaptor_base<T, Alignment, A, !aligned_allocator_traits<A>::provides_static_alignment(Alignment)>
 {
-    using base = detail::aligned_allocator_base<T, Alignment, A, !aligned_allocator_traits<A>::provides_static_alignment(Alignment)>;
+    using base = detail::aligned_allocator_adaptor_base<T, Alignment, A, !aligned_allocator_traits<A>::provides_static_alignment(Alignment)>;
 
 public:
     using base::base;
@@ -232,7 +235,7 @@ public:
     template <typename U>
     struct rebind
     {
-        using other = aligned_allocator<U, Alignment, typename std::allocator_traits<A>::template rebind_alloc<U>>;
+        using other = aligned_allocator_adaptor<U, Alignment, typename std::allocator_traits<A>::template rebind_alloc<U>>;
     };
 };
 
