@@ -6,11 +6,9 @@
 #include <memory> // for unique_ptr<>
 
 
-namespace sysmakeshift
-{
+namespace sysmakeshift {
 
-namespace detail
-{
+namespace detail {
 
 
 struct thread_pool_thread;

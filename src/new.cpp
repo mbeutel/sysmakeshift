@@ -27,11 +27,11 @@
 #endif
 
 
-namespace sysmakeshift
-{
+namespace sysmakeshift {
 
 
-std::size_t hardware_large_page_size(void) noexcept
+std::size_t
+hardware_large_page_size(void) noexcept
 {
     static std::size_t result = []
     {
@@ -71,7 +71,8 @@ std::size_t hardware_large_page_size(void) noexcept
     return result;
 }
 
-std::size_t hardware_page_size(void) noexcept
+std::size_t
+hardware_page_size(void) noexcept
 {
     static std::size_t result = []
     {
@@ -90,7 +91,8 @@ std::size_t hardware_page_size(void) noexcept
     return result;
 }
 
-std::size_t hardware_cache_line_size(void) noexcept
+std::size_t
+hardware_cache_line_size(void) noexcept
 {
     static std::size_t result = []
     {

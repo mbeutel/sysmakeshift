@@ -13,8 +13,7 @@
 #include <gsl-lite/gsl-lite.hpp> // for gsl_Expects()
 
 
-namespace sysmakeshift
-{
+namespace sysmakeshift {
 
 
 namespace gsl = ::gsl_lite;
@@ -27,8 +26,7 @@ template <typename T, std::size_t Alignment, typename A>
 class aligned_row_buffer;
 
 
-namespace detail
-{
+namespace detail {
 
 
 template <typename T>

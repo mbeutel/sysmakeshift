@@ -6,8 +6,7 @@
 #include <thread>
 
 
-namespace sysmakeshift
-{
+namespace sysmakeshift {
 
 
     //
@@ -51,7 +50,7 @@ public:
 };
 
 
-} // sysmakeshift
+} // namespace sysmakeshift
 
 
 #endif // INCLUDED_SYSMAKESHIFT_THREAD_HPP_

@@ -29,7 +29,8 @@ public:
         : seNumber_(_seNumber)
     {
     }
-    unsigned seNumber(void) const noexcept
+    unsigned
+    seNumber(void) const noexcept
     {
         return seNumber_;
     }
@@ -57,7 +58,8 @@ public:
         : oldTranslator_(std::exchange(rhs.oldTranslator_, nullptr))
     {
     }
-    ScopedStructuredExceptionTranslator& operator =(ScopedStructuredExceptionTranslator&&) = delete;
+    ScopedStructuredExceptionTranslator&
+    operator =(ScopedStructuredExceptionTranslator&&) = delete;
 };
 
 void translateStructuredExceptionToStdException(unsigned u, EXCEPTION_POINTERS*)
@@ -84,25 +86,29 @@ void fpSignalHandler([[maybe_unused]] int sig)
 
 
 template <typename T>
-void discard(T) // pre-C++17 tax
+void
+discard(T) // pre-C++17 tax
 {
 }
 
-void divBy0(void)
+void
+divBy0(void)
 {
     volatile double zero = 0.;
     volatile double x = 1./zero;
     discard(x);
 }
 
-void inexact(void)
+void
+inexact(void)
 {
     volatile double ten = 10.;
     volatile double x = 1./ten;
     discard(x);
 }
 
-void invalid(void)
+void
+invalid(void)
 {
     volatile double minus1 = -1.;
     volatile double x = std::sqrt(minus1);

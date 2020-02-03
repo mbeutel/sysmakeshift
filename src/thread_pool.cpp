@@ -41,21 +41,21 @@
 #include <sysmakeshift/buffer.hpp>      // for aligned_buffer<>
 
 
-namespace sysmakeshift
-{
+namespace sysmakeshift {
 
-namespace detail
-{
+namespace detail {
 
 
-void posixCheck(int errorCode)
+void
+posixCheck(int errorCode)
 {
     if (errorCode != 0)
     {
         throw std::system_error(std::error_code(errorCode, std::generic_category()));
     }
 }
-void posixAssert(bool success)
+void
+posixAssert(bool success)
 {
     if (!success)
     {
@@ -64,14 +64,16 @@ void posixAssert(bool success)
 }
 
 #ifdef _WIN32
-void win32Check(DWORD errorCode)
+void
+win32Check(DWORD errorCode)
 {
     if (errorCode != ERROR_SUCCESS)
     {
         throw std::system_error(std::error_code(errorCode, std::system_category())); // TODO: does this work correctly?
     }
 }
-void win32Assert(BOOL success)
+void
+win32Assert(BOOL success)
 {
     if (!success)
     {
@@ -99,7 +101,8 @@ typedef struct tagTHREADNAME_INFO
 
     // Sets the name of the thread with the given thread id for debugging purposes.
     // A thread id of -1 can be used to refer to the current thread.
-void setThreadNameViaException(DWORD dwThreadId, const char* threadName)
+void
+setThreadNameViaException(DWORD dwThreadId, const char* threadName)
 {
     THREADNAME_INFO info;
     info.dwType = 0x1000;
@@ -121,7 +124,8 @@ void setThreadNameViaException(DWORD dwThreadId, const char* threadName)
 
 typedef HRESULT SetThreadDescriptionType(HANDLE hThread, PCWSTR lpThreadDescription);
 
-void setCurrentThreadDescription(const wchar_t* threadDescription)
+void
+setCurrentThreadDescription(const wchar_t* threadDescription)
 {
     static SetThreadDescriptionType* const setThreadDescription = []
     {
@@ -165,15 +169,18 @@ public:
         std::size_t lsize = size();
         CPU_ZERO_S(lsize, data_);
     }
-    std::size_t size(void) const noexcept
+    std::size_t
+    size(void) const noexcept
     {
         return CPU_ALLOC_SIZE(cpuCount_);
     }
-    const cpu_set_t* data(void) const noexcept
+    const cpu_set_t*
+    data(void) const noexcept
     {
         return data_;
     }
-    void setCpuFlag(std::size_t coreIdx)
+    void
+    set_cpu_flag(std::size_t coreIdx)
     {
         gsl_Expects(coreIdx < cpuCount_);
         std::size_t lsize = size();
@@ -188,7 +195,8 @@ public:
 #endif // _WIN32
 
 #ifdef _WIN32 // currently not needed on non-Windows platforms, so avoid defining it to suppress "unused function" warning
-static void setThreadAffinity(std::thread::native_handle_type handle, std::size_t coreIdx)
+static void
+setThreadAffinity(std::thread::native_handle_type handle, std::size_t coreIdx)
 {
 # if defined(_WIN32)
     if (coreIdx >= sizeof(DWORD_PTR) * 8) // bits per byte
@@ -198,7 +206,7 @@ static void setThreadAffinity(std::thread::native_handle_type handle, std::size_
     win32Assert(SetThreadAffinityMask((HANDLE) handle, DWORD_PTR(1) << coreIdx) != 0);
 # elif defined(USE_PTHREAD_SETAFFINITY)
     cpu_set cpuSet;
-    cpuSet.setCpuFlag(coreIdx);
+    cpuSet.set_cpu_flag(coreIdx);
     posixCheck(::pthread_setaffinity_np((pthread_t) handle, cpuSet.size(), cpuSet.data()));
 # else
 #  error Unsupported operating system.
@@ -207,10 +215,11 @@ static void setThreadAffinity(std::thread::native_handle_type handle, std::size_
 #endif // _WIN32
 
 #ifdef USE_PTHREAD_SETAFFINITY
-static void setThreadAttrAffinity(pthread_attr_t& attr, std::size_t coreIdx)
+static void
+setThreadAttrAffinity(pthread_attr_t& attr, std::size_t coreIdx)
 {
     cpu_set cpuSet;
-    cpuSet.setCpuFlag(coreIdx);
+    cpuSet.set_cpu_flag(coreIdx);
     posixCheck(::pthread_attr_setaffinity_np(&attr, cpuSet.size(), cpuSet.data()));
 }
 #endif // USE_PTHREAD_SETAFFINITY
@@ -219,7 +228,8 @@ static void setThreadAttrAffinity(pthread_attr_t& attr, std::size_t coreIdx)
 #if defined(_WIN32)
 struct win32_handle_deleter
 {
-    void operator ()(HANDLE handle) const noexcept
+    void
+    operator ()(HANDLE handle) const noexcept
     {
         ::CloseHandle(handle);
     }
@@ -232,10 +242,22 @@ private:
     pthread_t handle_;
 
 public:
-    pthread_t get(void) const noexcept { return handle_; }
-    pthread_t release(void) noexcept { return std::exchange(handle_, { }); }
+    pthread_t
+    get(void) const noexcept
+    {
+        return handle_;
+    }
+    pthread_t
+    release(void) noexcept
+    {
+        return std::exchange(handle_, { });
+    }
 
-    explicit operator bool(void) const noexcept { return handle_ != pthread_t{ }; }
+    explicit
+    operator bool(void) const noexcept
+    {
+        return handle_ != pthread_t{ };
+    }
 
     pthread_handle(void)
         : handle_{ }
@@ -249,7 +271,8 @@ public:
         : handle_(rhs.release())
     {
     }
-    pthread_handle& operator =(pthread_handle&& rhs) noexcept
+    pthread_handle&
+    operator =(pthread_handle&& rhs) noexcept
     {
         if (&rhs != this)
         {
@@ -318,7 +341,8 @@ public:
         gsl_Expects(numThreads_ < std::numeric_limits<std::size_t>::max() / 2);
     }
 
-    bool arrive_and_wait(void)
+    bool
+    arrive_and_wait(void)
     {
         gsl_Expects(numThreads_ != 0);
 
@@ -370,12 +394,15 @@ struct thread_pool_thread
     {
     }
 
-    void operator ()(void);
+    void
+    operator ()(void);
 
 #if defined(_WIN32)
-    static unsigned __stdcall threadFunc(void* data);
+    static unsigned __stdcall
+    threadFunc(void* data);
 #elif defined(USE_PTHREAD)
-    static void* threadFunc(void* data);
+    static void*
+    threadFunc(void* data);
 #else
 # error Unsupported operating system.
 #endif // _WIN32
@@ -408,7 +435,8 @@ private:
     std::vector<int> hardwareThreadMappings_;
 #endif // USE_PTHREAD_SETAFFINITY
 
-    static std::size_t getHardwareThreadId(int threadIdx, int maxNumHardwareThreads, gsl::span<int const> hardwareThreadMappings)
+    static std::size_t
+    getHardwareThreadId(int threadIdx, int maxNumHardwareThreads, gsl::span<int const> hardwareThreadMappings)
     {
         auto subidx = threadIdx % maxNumHardwareThreads;
         return gsl::narrow<std::size_t>(
@@ -416,7 +444,8 @@ private:
           : subidx);
     }
 
-    void join_threads_and_free(void) noexcept // We cannot really handle join failure.
+    void
+    join_threads_and_free(void) noexcept // We cannot really handle join failure.
     {
         auto self = std::unique_ptr<thread_pool_impl>(this);
         
@@ -447,7 +476,8 @@ private:
 #endif
     }
 
-    void schedule_termination(std::future<void>* completion) noexcept // We cannot really handle `bad_alloc` here.
+    void
+    schedule_termination(std::future<void>* completion) noexcept // We cannot really handle `bad_alloc` here.
     {
         nextJob_.set_value(std::nullopt);
         if (completion != nullptr)
@@ -499,17 +529,20 @@ public:
 #endif // USE_PTHREAD
     }
 
-    bool wait_at_barrier(void)
+    bool
+    wait_at_barrier(void)
     {
         return barrier_.arrive_and_wait();
     }
 
 
 #ifdef _WIN32
-    unsigned thread_pool_id(void) const noexcept { return threadPoolId_; }
+    unsigned
+    thread_pool_id(void) const noexcept { return threadPoolId_; }
 #endif // _WIN32
 
-    void launch_threads(void) noexcept // We cannot really handle thread launch/resume failure.
+    void
+    launch_threads(void) noexcept // We cannot really handle thread launch/resume failure.
     {
         if (running_) return;
         running_ = true;
@@ -546,7 +579,8 @@ public:
 #endif
     }
 
-    void schedule_job(std::future<void>* completion, std::function<void(thread_pool::task_context)> action, int concurrency, bool last) noexcept // We cannot really handle failure in future chaining.
+    void
+    schedule_job(std::future<void>* completion, std::function<void(thread_pool::task_context)> action, int concurrency, bool last) noexcept // We cannot really handle failure in future chaining.
     {
         auto completionPromise = std::optional<std::promise<void>>{ };
         if (completion != nullptr)
@@ -562,7 +596,8 @@ public:
 #endif // USE_PTHREAD
     }
 
-    void close_and_free(std::future<void>* completion)
+    void
+    close_and_free(std::future<void>* completion)
     {
 #if defined(_WIN32)
         schedule_termination(completion);
@@ -602,12 +637,14 @@ public:
 
     // Like the parallel overloads of the standard algorithms, we terminate (implicitly) if an exception is thrown
     // by a thread pool job because the semantics of exceptions in multiplexed actions are unclear.
-static void runJob(std::function<void(thread_pool::task_context)> action, thread_pool::task_context arg) noexcept
+static void
+runJob(std::function<void(thread_pool::task_context)> action, thread_pool::task_context arg) noexcept
 {
     action(arg);
 }
 
-void thread_pool_thread::operator ()(void)
+void
+thread_pool_thread::operator ()(void)
 {
     for (;;)
     {
@@ -645,7 +682,8 @@ void thread_pool_thread::operator ()(void)
 }
 
 #if defined(_WIN32)
-unsigned __stdcall thread_pool_thread::threadFunc(void* data)
+unsigned __stdcall
+thread_pool_thread::threadFunc(void* data)
 {
     thread_pool_thread& self = *static_cast<thread_pool_thread*>(data);
     {
@@ -658,7 +696,8 @@ unsigned __stdcall thread_pool_thread::threadFunc(void* data)
     return 0;
 }
 #elif defined(USE_PTHREAD)
-void* thread_pool_thread::threadFunc(void* data)
+void*
+thread_pool_thread::threadFunc(void* data)
 {
     thread_pool_thread& self = *static_cast<thread_pool_thread*>(data);
     self();
@@ -669,7 +708,8 @@ void* thread_pool_thread::threadFunc(void* data)
 #endif
 
 
-void thread_pool_impl_deleter::operator ()(thread_pool_impl_base* impl)
+void
+thread_pool_impl_deleter::operator ()(thread_pool_impl_base* impl)
 {
     static_cast<detail::thread_pool_impl*>(impl)->close_and_free(nullptr);
 }
@@ -678,7 +718,8 @@ void thread_pool_impl_deleter::operator ()(thread_pool_impl_base* impl)
 } // namespace detail
 
 
-detail::thread_pool_handle thread_pool::create(thread_pool::params p)
+detail::thread_pool_handle
+thread_pool::create(thread_pool::params p)
 {
         // Replace placeholder arguments with appropriate default values.
     int hardwareConcurrency = gsl::narrow<int>(std::thread::hardware_concurrency());
@@ -707,7 +748,8 @@ detail::thread_pool_handle thread_pool::create(thread_pool::params p)
     return detail::thread_pool_handle(new detail::thread_pool_impl(p));
 }
 
-std::future<void> thread_pool::do_run(std::function<void(task_context)> action, int concurrency, bool join)
+std::future<void>
+thread_pool::do_run(std::function<void(task_context)> action, int concurrency, bool join)
 {
     std::future<void> completion;
     auto& impl = static_cast<detail::thread_pool_impl&>(*handle_.get());

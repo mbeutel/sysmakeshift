@@ -18,8 +18,7 @@
 #include <sysmakeshift/detail/transaction.hpp>
 
 
-namespace sysmakeshift
-{
+namespace sysmakeshift {
 
 
 namespace gsl = ::gsl_lite;
@@ -53,7 +52,8 @@ private:
     std::size_t size_; // # elements
     std::size_t bytesPerElement_;
 
-    static std::size_t computeBytesPerElement(void)
+    static std::size_t
+    computeBytesPerElement(void)
     {
         auto bytesPerElementR = detail::ceili(sizeof(T), detail::alignment_in_bytes(Alignment | alignof(T)));
         if (bytesPerElementR.ec != std::errc{ }) throw std::bad_alloc{ };
@@ -90,7 +90,8 @@ private:
             transaction.commit();
         }
     }
-    void destroy_and_free(void) noexcept
+    void
+    destroy_and_free(void) noexcept
     {
         detail::destroy_aligned_buffer<T>(data_, get_allocator(), size_, bytesPerElement_);
         auto alloc = byte_allocator_(get_allocator());
@@ -156,7 +157,8 @@ public:
           bytesPerElement_(rhs.bytesPerElement_)
     {
     }
-    constexpr aligned_buffer& operator =(aligned_buffer&& rhs) noexcept
+    constexpr aligned_buffer&
+    operator =(aligned_buffer&& rhs) noexcept
     {
         if (this != &rhs)
         {
@@ -177,66 +179,79 @@ public:
         }
     }
 
-    gsl_NODISCARD allocator_type get_allocator(void) const noexcept
+    gsl_NODISCARD allocator_type
+    get_allocator(void) const noexcept
     {
         return *this;
     }
 
-    gsl_NODISCARD std::size_t size(void) const noexcept
+    gsl_NODISCARD std::size_t
+    size(void) const noexcept
     {
         return size_;
     }
-    gsl_NODISCARD reference operator [](std::size_t i)
+    gsl_NODISCARD reference
+    operator [](std::size_t i)
     {
         gsl_Expects(i < size_);
 
         return *reinterpret_cast<pointer>(&data_[i * bytesPerElement_]);
     }
-    gsl_NODISCARD const_reference operator [](std::size_t i) const
+    gsl_NODISCARD const_reference
+    operator [](std::size_t i) const
     {
         gsl_Expects(i < size_);
 
         return *reinterpret_cast<pointer>(&data_[i * bytesPerElement_]);
     }
 
-    gsl_NODISCARD iterator begin(void) noexcept
+    gsl_NODISCARD iterator
+    begin(void) noexcept
     {
         return { data_, 0, bytesPerElement_ };
     }
-    gsl_NODISCARD const_iterator begin(void) const noexcept
+    gsl_NODISCARD const_iterator
+    begin(void) const noexcept
     {
         return { data_, 0, bytesPerElement_ };
     }
-    gsl_NODISCARD iterator end(void) noexcept
+    gsl_NODISCARD iterator
+    end(void) noexcept
     {
         return { data_, size_, bytesPerElement_ };
     }
-    gsl_NODISCARD const_iterator end(void) const noexcept
+    gsl_NODISCARD const_iterator
+    end(void) const noexcept
     {
         return { data_, size_, bytesPerElement_ };
     }
 
-    gsl_NODISCARD constexpr bool empty(void) const noexcept
+    gsl_NODISCARD constexpr bool
+    empty(void) const noexcept
     {
         return size_ == 0;
     }
 
-    gsl_NODISCARD reference front(void)
+    gsl_NODISCARD reference
+    front(void)
     {
         gsl_Expects(!empty());
         return (*this)[0];
     }
-    gsl_NODISCARD const_reference front(void) const
+    gsl_NODISCARD const_reference
+    front(void) const
     {
         gsl_Expects(!empty());
         return (*this)[0];
     }
-    gsl_NODISCARD reference back(void)
+    gsl_NODISCARD reference
+    back(void)
     {
         gsl_Expects(!empty());
         return (*this)[size() - 1];
     }
-    gsl_NODISCARD const_reference back(void) const
+    gsl_NODISCARD const_reference
+    back(void) const
     {
         gsl_Expects(!empty());
         return (*this)[size() - 1];
@@ -369,7 +384,8 @@ public:
           bytesPerRow_(std::exchange(rhs.bytesPerRow_, { }))
     {
     }
-    constexpr aligned_row_buffer& operator =(aligned_row_buffer&& rhs) noexcept
+    constexpr aligned_row_buffer&
+    operator =(aligned_row_buffer&& rhs) noexcept
     {
         if (this != &rhs)
         {
@@ -392,75 +408,90 @@ public:
         }
     }
 
-    gsl_NODISCARD allocator_type get_allocator(void) const noexcept
+    gsl_NODISCARD allocator_type
+    get_allocator(void) const noexcept
     {
         return *this;
     }
 
-    gsl_NODISCARD std::size_t rows(void) const noexcept
+    gsl_NODISCARD std::size_t
+    rows(void) const noexcept
     {
         return rows_;
     }
-    gsl_NODISCARD std::size_t columns(void) const noexcept
+    gsl_NODISCARD std::size_t
+    columns(void) const noexcept
     {
         return cols_;
     }
 
-    gsl_NODISCARD std::size_t size(void) const noexcept
+    gsl_NODISCARD std::size_t
+    size(void) const noexcept
     {
         return rows();
     }
-    gsl_NODISCARD gsl::span<T> operator [](std::size_t i)
+    gsl_NODISCARD gsl::span<T>
+    operator [](std::size_t i)
     {
         gsl_Expects(i < rows_);
 
         return { reinterpret_cast<T*>(&data_[i * bytesPerRow_]), cols_ };
     }
-    gsl_NODISCARD gsl::span<T const> operator [](std::size_t i) const
+    gsl_NODISCARD gsl::span<T const>
+    operator [](std::size_t i) const
     {
         gsl_Expects(i < rows_);
 
         return { reinterpret_cast<T*>(&data_[i * bytesPerRow_]), cols_ };
     }
 
-    gsl_NODISCARD iterator begin(void) noexcept
+    gsl_NODISCARD iterator
+    begin(void) noexcept
     {
         return { data_, 0, cols_, bytesPerRow_ };
     }
-    gsl_NODISCARD const_iterator begin(void) const noexcept
+    gsl_NODISCARD const_iterator
+    begin(void) const noexcept
     {
         return { data_, 0, cols_, bytesPerRow_ };
     }
-    gsl_NODISCARD iterator end(void) noexcept
+    gsl_NODISCARD iterator
+    end(void) noexcept
     {
         return { data_, rows_, cols_, bytesPerRow_ };
     }
-    gsl_NODISCARD const_iterator end(void) const noexcept
+    gsl_NODISCARD const_iterator
+    end(void) const noexcept
     {
         return { data_, rows_, cols_, bytesPerRow_ };
     }
 
-    gsl_NODISCARD constexpr bool empty(void) const noexcept
+    gsl_NODISCARD constexpr bool
+    empty(void) const noexcept
     {
         return rows_ == 0;
     }
 
-    gsl_NODISCARD reference front(void)
+    gsl_NODISCARD reference
+    front(void)
     {
         gsl_Expects(!empty());
         return (*this)[0];
     }
-    gsl_NODISCARD const_reference front(void) const
+    gsl_NODISCARD const_reference
+    front(void) const
     {
         gsl_Expects(!empty());
         return (*this)[0];
     }
-    gsl_NODISCARD reference back(void)
+    gsl_NODISCARD reference
+    back(void)
     {
         gsl_Expects(!empty());
         return (*this)[size() - 1];
     }
-    gsl_NODISCARD const_reference back(void) const
+    gsl_NODISCARD const_reference
+    back(void) const
     {
         gsl_Expects(!empty());
         return (*this)[size() - 1];

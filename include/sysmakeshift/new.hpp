@@ -6,8 +6,7 @@
 #include <cstddef> // for size_t
 
 
-namespace sysmakeshift
-{
+namespace sysmakeshift {
 
 
     // It is controversial whether C++17 `std::hardware_{constructive|destructive}_interference_size` should really be a constexpr value, cf. the discussion at
@@ -25,17 +24,20 @@ namespace sysmakeshift
     //
     // Reports the operating system's large page size in bytes, or 0 if large pages are not available or not supported.
     //
-std::size_t hardware_large_page_size(void) noexcept;
+std::size_t
+hardware_large_page_size(void) noexcept;
 
     //
     // Reports the operating system's page size in bytes.
     //
-std::size_t hardware_page_size(void) noexcept;
+std::size_t
+hardware_page_size(void) noexcept;
 
     //
     // Reports the CPU architecture's cache line size in bytes.
     //
-std::size_t hardware_cache_line_size(void) noexcept;
+std::size_t
+hardware_cache_line_size(void) noexcept;
 
 
 // TODO: implement evict_from_cache() (here??)

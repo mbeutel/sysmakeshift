@@ -18,8 +18,7 @@
 #endif
 
 
-namespace sysmakeshift
-{
+namespace sysmakeshift {
 
 
 #if defined(_WIN32)
@@ -29,7 +28,8 @@ static_assert(FE_DIVBYZERO == _EM_ZERODIVIDE && FE_INEXACT == _EM_INEXACT && FE_
 
 #ifdef APPLE_INTEL
 // borrowed from http://www-personal.umich.edu/~williams/archive/computation/fe-handling-example.c
-static int fegetexcept(void)
+static int
+fegetexcept(void)
 {
     fenv_t fenv;
     if (fegetenv(&fenv))
@@ -38,7 +38,8 @@ static int fegetexcept(void)
     }
     return ~fenv.__control & FE_ALL_EXCEPT;
 }
-static int feenableexcept(int excepts)
+static int
+feenableexcept(int excepts)
 {
     fenv_t fenv;
     int new_excepts = excepts & FE_ALL_EXCEPT;
@@ -57,7 +58,8 @@ static int feenableexcept(int excepts)
 
     return fesetenv(&fenv) ? -1 : old_excepts;
 }
-static int fedisableexcept(int excepts)
+static int
+fedisableexcept(int excepts)
 {
     fenv_t fenv;
     int new_excepts = excepts & FE_ALL_EXCEPT;
@@ -78,7 +80,8 @@ static int fedisableexcept(int excepts)
 }
 #endif
 
-gsl_NODISCARD bool try_set_trapping_fe_exceptions(int excepts) noexcept
+gsl_NODISCARD bool
+try_set_trapping_fe_exceptions(int excepts) noexcept
 {
     gsl_Expects((excepts & ~FE_ALL_EXCEPT) == 0);
 
@@ -108,7 +111,8 @@ gsl_NODISCARD bool try_set_trapping_fe_exceptions(int excepts) noexcept
 #endif
 }
 
-int get_trapping_fe_exceptions(void) noexcept
+int
+get_trapping_fe_exceptions(void) noexcept
 {
 #if defined(_WIN32)
     unsigned flags;

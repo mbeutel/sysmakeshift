@@ -14,8 +14,7 @@
 #include <sysmakeshift/detail/thread_pool.hpp>
 
 
-namespace sysmakeshift
-{
+namespace sysmakeshift {
 
 
 namespace gsl = ::gsl_lite;
@@ -80,18 +79,27 @@ public:
             //
             // The current thread index.
             //
-        gsl_NODISCARD int thread_index(void) const noexcept { return threadIdx_; }
+        gsl_NODISCARD int
+        thread_index(void) const noexcept
+        {
+            return threadIdx_;
+        }
 
             //
             // The number of concurrent threads.
             //
-        gsl_NODISCARD int num_threads(void) const noexcept { return impl_.numThreads_; }
+        gsl_NODISCARD int
+        num_threads(void) const noexcept
+        {
+            return impl_.numThreads_;
+        }
     };
 
 private:
     gsl::not_null<detail::thread_pool_handle> handle_;
 
-    static params const& check_params(params const& p)
+    static params const&
+    check_params(params const& p)
     {
         gsl_Expects(p.num_threads >= 0);
         gsl_Expects(p.max_num_hardware_threads >= 0 && (p.num_threads == 0 || p.max_num_hardware_threads <= p.num_threads));
@@ -127,7 +135,8 @@ public:
         // The thread pool makes a dedicated copy of `action` for every participating thread and invokes it with an appropriate task context.
         // If `action()` throws an exception, `std::terminate()` is called.
         //
-    void run(std::function<void(task_context)> action, int concurrency = 0) &
+    void
+    run(std::function<void(task_context)> action, int concurrency = 0) &
     {
         gsl_Expects(action);
         gsl_Expects(concurrency >= 0 && concurrency <= handle_->numThreads_);
@@ -143,7 +152,8 @@ public:
         // The thread pool makes a dedicated copy of `action` for every participating thread and invokes it with an appropriate task context.
         // If `action()` throws an exception, `std::terminate()` is called.
         //
-    void run(std::function<void(task_context)> action, int concurrency = 0) &&
+    void
+    run(std::function<void(task_context)> action, int concurrency = 0) &&
     {
         gsl_Expects(action);
         gsl_Expects(concurrency >= 0 && concurrency <= handle_->numThreads_);
@@ -160,7 +170,8 @@ public:
         // The thread pool makes a dedicated copy of `action` for every participating thread and invokes it with an appropriate task context.
         // If `action()` throws an exception, `std::terminate()` is called.
         //
-    gsl_NODISCARD std::future<void> run_async(std::function<void(task_context)> action, int concurrency = 0) &
+    gsl_NODISCARD std::future<void>
+    run_async(std::function<void(task_context)> action, int concurrency = 0) &
     {
         gsl_Expects(action);
         gsl_Expects(concurrency >= 0 && concurrency <= handle_->numThreads_);
@@ -177,7 +188,8 @@ public:
         // The thread pool makes a dedicated copy of `action` for every participating thread and invokes it with an appropriate task context.
         // If `action()` throws an exception, `std::terminate()` is called.
         //
-    gsl_NODISCARD std::future<void> run_async(std::function<void(task_context)> action, int concurrency = 0) &&
+    gsl_NODISCARD std::future<void>
+    run_async(std::function<void(task_context)> action, int concurrency = 0) &&
     {
         gsl_Expects(action);
         gsl_Expects(concurrency >= 0 && concurrency <= handle_->numThreads_);
@@ -187,7 +199,7 @@ public:
 };
 
 
-} // sysmakeshift
+} // namespace sysmakeshift
 
 
 #endif // INCLUDED_SYSMAKESHIFT_THREAD_POOL_HPP_

@@ -18,8 +18,7 @@
 #include <sysmakeshift/detail/type_traits.hpp> // for can_instantiate<>
 
 
-namespace sysmakeshift
-{
+namespace sysmakeshift {
 
 
 namespace gsl = ::gsl_lite;
@@ -43,13 +42,15 @@ public:
     };
 
     template <typename U>
-    void construct(U* ptr)
+    void
+    construct(U* ptr)
     noexcept(std::is_nothrow_default_constructible<U>::value)
     {
         ::new(static_cast<void*>(ptr)) U;
     }
     template <typename U, typename...ArgsT>
-    void construct(U* ptr, ArgsT&&... args)
+    void
+    construct(U* ptr, ArgsT&&... args)
     {
         std::allocator_traits<A>::construct(static_cast<A&>(*this), ptr, std::forward<ArgsT>(args)...);
     }
@@ -73,26 +74,30 @@ public:
     {
     }
 
-    gsl_NODISCARD value_type* allocate(std::size_t n)
+    gsl_NODISCARD value_type*
+    allocate(std::size_t n)
     {
         auto mem = std::calloc(n, sizeof(value_type));
         if (mem == nullptr) throw std::bad_alloc{ };
         return static_cast<value_type*>(mem);
     }
 
-    void deallocate(value_type* p, std::size_t) noexcept
+    void
+    deallocate(value_type* p, std::size_t) noexcept
     {
         std::free(p);
     }
 };
 
 template <typename T, typename U>
-gsl_NODISCARD bool operator ==(zero_init_allocator<T> const&, zero_init_allocator<U> const&) noexcept
+gsl_NODISCARD bool
+operator ==(zero_init_allocator<T> const&, zero_init_allocator<U> const&) noexcept
 {
     return true;
 }
 template <typename T, typename U>
-gsl_NODISCARD bool operator !=(zero_init_allocator<T> const& x, zero_init_allocator<U> const& y) noexcept
+gsl_NODISCARD bool
+operator !=(zero_init_allocator<T> const& x, zero_init_allocator<U> const& y) noexcept
 {
     return !(x == y);
 }
@@ -120,7 +125,8 @@ constexpr std::size_t cache_line_alignment = (std::numeric_limits<std::size_t>::
     // The alignments corresponding to the special alignment values `large_page_alignment`, `page_alignment`, and `cache_line_alignment` are not known until runtime,
     // hence to satisfy a requested special alignment it must be provided explicitly by the provided alignment.
     //
-constexpr bool provides_static_alignment(std::size_t alignmentProvided, std::size_t alignmentRequested) noexcept
+constexpr bool
+provides_static_alignment(std::size_t alignmentProvided, std::size_t alignmentRequested) noexcept
 {
     return detail::provides_static_alignment(alignmentProvided, alignmentRequested);
 }
@@ -130,7 +136,8 @@ constexpr bool provides_static_alignment(std::size_t alignmentProvided, std::siz
     //ᅟ
     // Looks up the alignments corresponding to the special alignment values `large_page_alignment`, `page_alignment`, and `cache_line_alignment`.
     //
-inline bool provides_dynamic_alignment(std::size_t alignmentProvided, std::size_t alignmentRequested) noexcept
+inline bool
+provides_dynamic_alignment(std::size_t alignmentProvided, std::size_t alignmentRequested) noexcept
 {
     return detail::provides_dynamic_alignment(alignmentProvided, alignmentRequested);
 }
@@ -143,17 +150,20 @@ template <typename A>
 struct aligned_allocator_traits
 {
 private:
-    static constexpr bool provides_static_alignment_impl(std::size_t a, std::false_type /*hasMember*/)
+    static constexpr bool
+    provides_static_alignment_impl(std::size_t a, std::false_type /*hasMember*/)
     {
         return sysmakeshift::provides_static_alignment(alignof(std::max_align_t), a);
     }
-    static constexpr bool provides_static_alignment_impl(std::size_t a, std::true_type /*hasMember*/)
+    static constexpr bool
+    provides_static_alignment_impl(std::size_t a, std::true_type /*hasMember*/)
     {
         return A::provides_static_alignment(a);
     }
 
 public:
-    gsl_NODISCARD static constexpr bool provides_static_alignment(std::size_t a) noexcept
+    gsl_NODISCARD static constexpr bool
+    provides_static_alignment(std::size_t a) noexcept
     {
         return provides_static_alignment_impl(a, detail::has_member_provides_static_alignment<A>{ });
     }
@@ -186,19 +196,22 @@ public:
     {
     }
 
-    gsl_NODISCARD static constexpr bool provides_static_alignment(std::size_t a) noexcept
+    gsl_NODISCARD static constexpr bool
+    provides_static_alignment(std::size_t a) noexcept
     {
         return sysmakeshift::provides_static_alignment(Alignment, a);
     }
 
-    gsl_NODISCARD T* allocate(std::size_t n)
+    gsl_NODISCARD T*
+    allocate(std::size_t n)
     {
         std::size_t a = detail::alignment_in_bytes(Alignment | alignof(T));
         if (n >= std::numeric_limits<std::size_t>::max() / sizeof(T)) throw std::bad_alloc{ }; // overflow
         std::size_t nbData = n * sizeof(T);
         return static_cast<T*>(detail::aligned_alloc(nbData, a));
     }
-    void deallocate(T* ptr, std::size_t n) noexcept
+    void
+    deallocate(T* ptr, std::size_t n) noexcept
     {
         std::size_t a = detail::alignment_in_bytes(Alignment | alignof(T));
         std::size_t nbData = n * sizeof(T); // cannot overflow due to preceding check in allocate()
@@ -207,12 +220,14 @@ public:
 };
 
 template <typename T, typename U, std::size_t Alignment>
-gsl_NODISCARD bool operator ==(aligned_allocator<T, Alignment>, aligned_allocator<U, Alignment>) noexcept
+gsl_NODISCARD bool
+operator ==(aligned_allocator<T, Alignment>, aligned_allocator<U, Alignment>) noexcept
 {
     return true;
 }
 template <typename T, typename U, std::size_t Alignment>
-gsl_NODISCARD bool operator !=(aligned_allocator<T, Alignment> x, aligned_allocator<U, Alignment> y) noexcept
+gsl_NODISCARD bool
+operator !=(aligned_allocator<T, Alignment> x, aligned_allocator<U, Alignment> y) noexcept
 {
     return !(x == y);
 }
@@ -258,7 +273,8 @@ public:
         : A(_alloc)
     {
     }
-    void operator ()(T* ptr) noexcept
+    void
+    operator ()(T* ptr) noexcept
     {
         std::allocator_traits<A>::destroy(*this, ptr);
         std::allocator_traits<A>::deallocate(*this, ptr, 1);
@@ -275,7 +291,8 @@ public:
         : A(_alloc), size_(_size)
     {
     }
-    void operator ()(T ptr[]) noexcept
+    void
+    operator ()(T ptr[]) noexcept
     {
         for (std::ptrdiff_t i = 0, n = std::ptrdiff_t(size_); i != n; ++i)
         {
@@ -292,7 +309,8 @@ public:
         : A(_alloc)
     {
     }
-    void operator ()(T ptr[]) noexcept
+    void
+    operator ()(T ptr[]) noexcept
     {
         for (std::ptrdiff_t i = 0; i != N; ++i)
         {

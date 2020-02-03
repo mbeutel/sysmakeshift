@@ -8,15 +8,13 @@
 #include <type_traits> // for integral_constant<>
 
 
-namespace sysmakeshift
-{
+namespace sysmakeshift {
 
 
 namespace gsl = ::gsl_lite;
 
 
-namespace detail
-{
+namespace detail {
 
 
 template <template <typename...> class, typename, typename...> struct can_instantiate_ : std::false_type { };

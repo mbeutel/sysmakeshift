@@ -10,18 +10,18 @@
 //# include <sys/mman.h> // for madvise()
 //#endif // __linux__
 
-namespace sysmakeshift
-{
+namespace sysmakeshift {
 
-namespace detail
-{
+namespace detail {
 
 
-void* aligned_alloc(std::size_t size, std::size_t alignment)
+void*
+aligned_alloc(std::size_t size, std::size_t alignment)
 {
     return ::operator new(size, std::align_val_t(alignment));
 }
-void aligned_free(void* data, std::size_t size, std::size_t alignment) noexcept
+void
+aligned_free(void* data, std::size_t size, std::size_t alignment) noexcept
 {
     return ::operator delete(data, size, std::align_val_t(alignment));
 }
@@ -34,7 +34,8 @@ void aligned_free(void* data, std::size_t size, std::size_t alignment) noexcept
 //}
 //#endif // __linux__
 
-static std::size_t floor_2p(std::size_t x)
+static std::size_t
+floor_2p(std::size_t x)
 {
     x |= x >> 1;
     x |= x >> 2;
@@ -46,7 +47,8 @@ static std::size_t floor_2p(std::size_t x)
     return (x + 1) >> 1; // assumes that x < powi(2, sizeof(std::size_t) * 8 - 1), which is given because the most significant bits have special meaning and have been masked out
 }
 
-std::size_t lookup_special_alignments(std::size_t a) noexcept
+std::size_t
+lookup_special_alignments(std::size_t a) noexcept
 {
     if ((a & large_page_alignment) != 0)
     {
@@ -67,7 +69,8 @@ std::size_t lookup_special_alignments(std::size_t a) noexcept
 
     return a;
 }
-std::size_t alignment_in_bytes(std::size_t a) noexcept
+std::size_t
+alignment_in_bytes(std::size_t a) noexcept
 {
     return std::max(std::size_t(1), floor_2p(lookup_special_alignments(a)));
 }

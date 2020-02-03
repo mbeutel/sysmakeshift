@@ -7,11 +7,9 @@
 #include <type_traits> // for integral_constant<>
 
 
-namespace sysmakeshift
-{
+namespace sysmakeshift {
 
-namespace detail
-{
+namespace detail {
 
 
     // TODO: Should this be in gsl-lite? B. Stroustrup rightfully claims that `on_success()`, `on_error()`, and `finally()` are the elementary operations here, but

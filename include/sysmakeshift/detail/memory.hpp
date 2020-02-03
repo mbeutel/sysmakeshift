@@ -14,15 +14,13 @@
 #include <sysmakeshift/detail/transaction.hpp>
 
 
-namespace sysmakeshift
-{
+namespace sysmakeshift {
 
 
 namespace gsl = ::gsl_lite;
 
 
-namespace detail
-{
+namespace detail {
 
 
 template <typename T> struct remove_extent_only;
