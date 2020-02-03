@@ -28,7 +28,7 @@ add_executable(test-sysmakeshift
     "test-fenv.cpp"
     "test-memory.cpp"
     "test-new.cpp"
-    "test-thread.cpp")
+    "test-thread_pool.cpp")
 
 # compiler settings
 cmakeshift_target_compile_settings(test-sysmakeshift

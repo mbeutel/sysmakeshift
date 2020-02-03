@@ -1,6 +1,6 @@
 
-#ifndef INCLUDED_SYSMAKESHIFT_DETAIL_THREAD_HPP_
-#define INCLUDED_SYSMAKESHIFT_DETAIL_THREAD_HPP_
+#ifndef INCLUDED_SYSMAKESHIFT_DETAIL_THREAD_POOL_HPP_
+#define INCLUDED_SYSMAKESHIFT_DETAIL_THREAD_POOL_HPP_
 
 
 #include <memory> // for unique_ptr<>
@@ -34,4 +34,4 @@ using thread_pool_handle = std::unique_ptr<detail::thread_pool_impl_base, thread
 } // namespace sysmakeshift
 
 
-#endif // INCLUDED_SYSMAKESHIFT_DETAIL_THREAD_HPP_
+#endif // INCLUDED_SYSMAKESHIFT_DETAIL_THREAD_POOL_HPP_

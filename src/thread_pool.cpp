@@ -37,8 +37,8 @@
 
 #include <gsl-lite/gsl-lite.hpp> // for narrow<>(), narrow_cast<>(), span<>
 
-#include <sysmakeshift/thread.hpp>
-#include <sysmakeshift/buffer.hpp> // for aligned_buffer<>
+#include <sysmakeshift/thread_pool.hpp>
+#include <sysmakeshift/buffer.hpp>      // for aligned_buffer<>
 
 
 namespace sysmakeshift
