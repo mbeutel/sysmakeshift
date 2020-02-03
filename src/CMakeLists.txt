@@ -36,7 +36,7 @@ cmakeshift_target_compile_settings(sysmakeshift
         default)
 if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.16)
     target_precompile_headers(sysmakeshift
-        INTERFACE
+        PRIVATE
             # C standard library
             <cstddef>
             # C++ standard library

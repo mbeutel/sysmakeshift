@@ -37,8 +37,8 @@ cmakeshift_target_compile_settings(test-sysmakeshift
         fp-model=strict) # to prevent our fenv tests from being broken by the optimizer
 target_compile_features(test-sysmakeshift PUBLIC cxx_std_14)
 if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.16)
-    target_precompile_headers(sysmakeshift
-        INTERFACE
+    target_precompile_headers(test-sysmakeshift
+        PRIVATE
             # C standard library
             <cstddef>
             # C++ standard library
