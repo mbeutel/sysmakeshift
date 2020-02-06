@@ -21,10 +21,10 @@ if(SYSMAKESHIFT_BUILD_TESTS)
 endif()
 
 # Install.
-find_package(CMakeshift 3.7 REQUIRED)
+find_package(CMakeshift 3.8 REQUIRED)
 include(CMakeshift/InstallBasicPackageFiles)
 cmakeshift_install_basic_package_files(sysmakeshift
     COMPATIBILITY SameMajorVersion
     DEPENDENCIES
         "Threads"
-        "gsl-lite 0.35.5")
+        "gsl-lite 0.36")
