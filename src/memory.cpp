@@ -9,7 +9,7 @@
 # include <Windows.h>
 #else
 // assume POSIX
-# include <sys/mman.h> // for mmap(), madvise()
+# include <sys/mman.h> // for mmap(), munmap(), madvise()
 #endif
 
 #include <sysmakeshift/new.hpp>    // for hardware_large_page_size(), hardware_page_size(), hardware_cache_line_size()
@@ -42,7 +42,7 @@ large_page_alloc(std::size_t size)
     {
         throw std::system_error(std::make_error_code(std::errc::not_supported));
     }
-    void* data = ::mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, 0);
+    void* data = ::mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     detail::posix_assert(data != nullptr);
     int ec = ::madvise(data, size, MADV_HUGEPAGE);
     if (ec != 0)
@@ -92,7 +92,7 @@ page_alloc(std::size_t size)
     detail::win32_assert(data != nullptr);
     return data;
 #else // assume POSIX
-    void* data = ::mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, 0);
+    void* data = ::mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     detail::posix_assert(data != nullptr);
 # if defined(__linux__)
     int ec = ::madvise(data, size, MADV_NOHUGEPAGE);
