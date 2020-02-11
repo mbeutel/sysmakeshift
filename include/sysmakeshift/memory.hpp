@@ -199,7 +199,7 @@ public:
     gsl_NODISCARD static constexpr bool
     provides_static_alignment(std::size_t a) noexcept
     {
-        return sysmakeshift::provides_static_alignment(Alignment, a);
+        return sysmakeshift::provides_static_alignment(Alignment | alignof(T), a);
     }
 
     gsl_NODISCARD T*
@@ -240,9 +240,9 @@ operator !=(aligned_allocator<T, Alignment> x, aligned_allocator<U, Alignment> y
     // Multiple alignment requirements can be combined using bitmask operations, e.g. `cache_line_alignment | alignof(T)`.
     //
 template <typename T, std::size_t Alignment, typename A>
-class aligned_allocator_adaptor : public detail::aligned_allocator_adaptor_base<T, Alignment, A, !aligned_allocator_traits<A>::provides_static_alignment(Alignment)>
+class aligned_allocator_adaptor : public detail::aligned_allocator_adaptor_base<T, Alignment, A, !aligned_allocator_traits<A>::provides_static_alignment(Alignment | alignof(T))>
 {
-    using base = detail::aligned_allocator_adaptor_base<T, Alignment, A, !aligned_allocator_traits<A>::provides_static_alignment(Alignment)>;
+    using base = detail::aligned_allocator_adaptor_base<T, Alignment, A, !aligned_allocator_traits<A>::provides_static_alignment(Alignment | alignof(T))>;
 
 public:
     using base::base;
