@@ -138,7 +138,7 @@ lookup_special_alignments(std::size_t a) noexcept
             // This is without effect if `hardware_large_page_size()` returns 0, i.e. if large pages are not supported.
         a |= hardware_large_page_size();
     }
-    if ((a & page_alignment) != 0)
+    if ((a & (large_page_alignment | page_alignment)) != 0)
     {
         a |= hardware_page_size();
     }
