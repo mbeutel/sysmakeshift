@@ -4,7 +4,7 @@
 
 
 #include <limits>
-#include <cstddef>     // for size_t, ptrdiff_t
+#include <cstddef>     // for size_t, ptrdiff_t, max_align_t
 #include <utility>     // for forward<>()
 #include <type_traits> // for integral_constant<>, declval<>()
 #include <memory>      // for allocator_traits<>
@@ -37,26 +37,20 @@ template <typename A, typename = void> struct has_member_provides_static_alignme
 template <typename A> struct has_member_provides_static_alignment<A, gsl::void_t<decltype(A::provides_static_alignment(std::declval<std::size_t>()))>> : std::is_convertible<decltype(A::provides_static_alignment(std::declval<std::size_t>())), bool> { };
 
 
-template <typename U>
-constexpr int
-bit_scan_reverse(U mask)
-{
-    int result = 0;
-    while (mask >>= 1)
-    {
-        ++result;
-    }
-    return result;
-}
-
 constexpr std::size_t special_alignments = std::numeric_limits<std::size_t>::max() & ~(std::numeric_limits<std::size_t>::max() >> 3); // = large_page_alignment | page_alignment | cache_line_alignment
 
 constexpr bool
 provides_static_alignment(std::size_t alignmentProvided, std::size_t alignmentRequested) noexcept
 {
-    std::size_t highestAlignmentProvided = std::size_t(1) << std::size_t(detail::bit_scan_reverse(alignmentProvided & ~special_alignments)); // only most significant bit
-    std::size_t allAlignmentsProvided = alignmentProvided | (highestAlignmentProvided - 1);
-    return (alignmentRequested & allAlignmentsProvided) == alignmentRequested;
+    std::size_t basicAlignmentProvided = alignmentProvided & ~special_alignments;
+    std::size_t basicAlignmentRequested = alignmentRequested & ~special_alignments;
+    if ((alignmentProvided & special_alignments) != 0)
+    {
+            // Every special alignment guarantees at least `std::max_align_t` alignment.
+        basicAlignmentProvided |= alignof(std::max_align_t);
+    }
+    return basicAlignmentProvided >= basicAlignmentRequested
+        && (alignmentProvided & special_alignments) >= (alignmentRequested & special_alignments);
 }
 
 
@@ -68,9 +62,7 @@ provides_dynamic_alignment(std::size_t alignmentProvided, std::size_t alignmentR
 {
     alignmentProvided = detail::lookup_special_alignments(alignmentProvided);
     alignmentRequested = detail::lookup_special_alignments(alignmentRequested);
-    std::size_t highestAlignmentProvided = std::size_t(1) << std::size_t(detail::bit_scan_reverse(alignmentProvided)); // only most significant bit
-    std::size_t allAlignmentsProvided = alignmentProvided | (highestAlignmentProvided - 1);
-    return (alignmentRequested & allAlignmentsProvided) == alignmentRequested;
+    return alignmentProvided >= alignmentRequested;
 }
 
 

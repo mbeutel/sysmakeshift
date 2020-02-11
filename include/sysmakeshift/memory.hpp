@@ -322,7 +322,8 @@ public:
     gsl_NODISCARD static constexpr bool
     provides_static_alignment(std::size_t a) noexcept
     {
-            // We cannot guarantee 
+            // We cannot guarantee large-page alignment particularly on Linux because `large_page_alloc()` uses `mmap()` and `madvise()`,
+            // so we only promise page alignment here.
         return sysmakeshift::provides_static_alignment(page_alignment, a);
     }
 
