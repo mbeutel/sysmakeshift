@@ -3,12 +3,10 @@
 #define INCLUDED_SYSMAKESHIFT_DETAIL_BUFFER_HPP_
 
 
-#include <limits>
 #include <memory>       // for allocator_traits<>
 #include <cstddef>      // for size_t, ptrdiff_t
 #include <iterator>     // for input_iterator_tag, output_iterator_tag, random_access_iterator_tag
-#include <type_traits>  // for common_type<>, integral_constant<>, enable_if<>, is_const<>, is_same<>, is_nothrow_default_constructible<>
-#include <system_error> // for errc
+#include <type_traits>  // for integral_constant<>, enable_if<>, is_const<>, is_same<>, is_nothrow_default_constructible<>
 
 #include <gsl-lite/gsl-lite.hpp> // for gsl_Expects()
 
@@ -27,48 +25,6 @@ class aligned_row_buffer;
 
 
 namespace detail {
-
-
-template <typename T>
-struct arithmetic_result
-{
-    T value;
-    std::errc ec;
-};
-
-template <typename A, typename B>
-constexpr arithmetic_result<std::common_type_t<A, B>> multiply_unsigned(A a, B b)
-{
-    // Borrowed from slowmath.
-
-    using V = std::common_type_t<A, B>;
-
-    if (b > 0 && a > std::numeric_limits<V>::max() / b) return { { }, std::errc::value_too_large };
-    return { a * b, { } };
-}
-
-    // Computes ⌈x ÷ d⌉ ∙ d for x ∊ ℕ₀, d ∊ ℕ, d ≠ 0.
-template <typename X, typename D>
-constexpr arithmetic_result<std::common_type_t<X, D>> ceili(X x, D d)
-{
-    // Borrowed from slowmath.
-
-    using V = std::common_type_t<X, D>;
-
-        // We have the following identities:
-        //
-        //     x = ⌊x ÷ d⌋ ∙ d + x mod d
-        //     ⌈x ÷ d⌉ = ⌊(x + d - 1) ÷ d⌋ = ⌊(x - 1) ÷ d⌋ + 1
-        //
-        // Assuming x ≠ 0, we can derive the form
-        //
-        //     ⌈x ÷ d⌉ ∙ d = x + d - (x - 1) mod d - 1 .
-
-    if (x == 0) return { 0, { } };
-    V dx = d - (x - 1) % d - 1;
-    if (x > std::numeric_limits<V>::max() - dx) return { { }, std::errc::value_too_large };
-    return { x + dx, { } };
-}
 
 
 template <typename T, typename A, typename... Ts>
@@ -194,7 +150,8 @@ public:
     }
 
     aligned_buffer_iterator(aligned_buffer_iterator const&) = default;
-    aligned_buffer_iterator& operator =(aligned_buffer_iterator const&) = default;
+    aligned_buffer_iterator&
+    operator =(aligned_buffer_iterator const&) = default;
 
     template <typename U,
               std::enable_if_t<std::is_const<T>::value && !std::is_const<U>::value && std::is_same<U const, T>::value, int> = 0>
@@ -204,7 +161,8 @@ public:
     }
     template <typename U,
               std::enable_if_t<std::is_const<T>::value && !std::is_const<U>::value && std::is_same<U const, T>::value, int> = 0>
-    aligned_buffer_iterator& operator =(aligned_buffer_iterator const& rhs) noexcept
+    aligned_buffer_iterator&
+    operator =(aligned_buffer_iterator const& rhs) noexcept
     {
         data_ = rhs.data_;
         index_ = rhs.index_;
@@ -220,95 +178,114 @@ public:
     using pointer           = T*;
     using reference         = T&;
 
-    friend bool operator ==(aligned_buffer_iterator const& lhs, aligned_buffer_iterator const& rhs)
+    friend bool
+    operator ==(aligned_buffer_iterator const& lhs, aligned_buffer_iterator const& rhs)
     {
         gsl_Expects(lhs.data_ == rhs.data_);
 
         return lhs.index_ == rhs.index_;
     }
-    friend bool operator !=(aligned_buffer_iterator const& lhs, aligned_buffer_iterator const& rhs)
+    friend bool
+    operator !=(aligned_buffer_iterator const& lhs, aligned_buffer_iterator const& rhs)
     {
         return !(lhs == rhs);
     }
-    friend bool operator <(aligned_buffer_iterator const& lhs, aligned_buffer_iterator const& rhs)
+    friend bool
+    operator <(aligned_buffer_iterator const& lhs, aligned_buffer_iterator const& rhs)
     {
         gsl_Expects(lhs.data_ == rhs.data_);
 
         return lhs.index_ < rhs.index_;
     }
-    friend bool operator >(aligned_buffer_iterator const& lhs, aligned_buffer_iterator const& rhs)
+    friend bool
+    operator >(aligned_buffer_iterator const& lhs, aligned_buffer_iterator const& rhs)
     {
         return rhs < lhs;
     }
-    friend bool operator <=(aligned_buffer_iterator const& lhs, aligned_buffer_iterator const& rhs)
+    friend bool
+    operator <=(aligned_buffer_iterator const& lhs, aligned_buffer_iterator const& rhs)
     {
         return !(rhs < lhs);
     }
-    friend bool operator >=(aligned_buffer_iterator const& lhs, aligned_buffer_iterator const& rhs)
+    friend bool
+    operator >=(aligned_buffer_iterator const& lhs, aligned_buffer_iterator const& rhs)
     {
         return !(lhs < rhs);
     }
 
-    gsl_NODISCARD reference operator *(void) const
+    gsl_NODISCARD reference
+    operator *(void) const
     {
         return *const_cast<T*>(reinterpret_cast<T const*>(data_ + index_ * bytesPerElement_));
     }
-    gsl_NODISCARD pointer operator ->(void) const
+    gsl_NODISCARD pointer
+    operator ->(void) const
     {
         return &**this;
     }
-    aligned_buffer_iterator& operator ++(void)
+    aligned_buffer_iterator&
+    operator ++(void)
     {
         ++index_;
         return *this;
     }
-    aligned_buffer_iterator& operator --(void)
+    aligned_buffer_iterator&
+    operator --(void)
     {
         --index_;
         return *this;
     }
-    aligned_buffer_iterator operator ++(int)
+    aligned_buffer_iterator
+    operator ++(int)
     {
         aligned_buffer_iterator result = *this;
         ++index_;
         return result;
     }
-    aligned_buffer_iterator operator --(int)
+    aligned_buffer_iterator
+    operator --(int)
     {
         aligned_buffer_iterator result = *this;
         --index_;
         return result;
     }
-    aligned_buffer_iterator& operator +=(difference_type d)
+    aligned_buffer_iterator&
+    operator +=(difference_type d)
     {
         index_ += d;
         return *this;
     }
-    aligned_buffer_iterator operator +(difference_type d) const
+    aligned_buffer_iterator
+    operator +(difference_type d) const
     {
         aligned_buffer_iterator result = *this;
         return result += d;
     }
-    friend aligned_buffer_iterator operator +(difference_type d, aligned_buffer_iterator const& self)
+    friend aligned_buffer_iterator
+    operator +(difference_type d, aligned_buffer_iterator const& self)
     {
         aligned_buffer_iterator result = self;
         return result += d;
     }
-    aligned_buffer_iterator& operator -=(difference_type d)
+    aligned_buffer_iterator&
+    operator -=(difference_type d)
     {
         index_ -= d;
         return *this;
     }
-    aligned_buffer_iterator operator -(difference_type d) const
+    aligned_buffer_iterator
+    operator -(difference_type d) const
     {
         aligned_buffer_iterator result = *this;
         return result -= d;
     }
-    difference_type operator -(aligned_buffer_iterator const& rhs) const
+    difference_type
+    operator -(aligned_buffer_iterator const& rhs) const
     {
         return index_ - rhs.index_;
     }
-    reference operator [](difference_type d) const
+    reference
+    operator [](difference_type d) const
     {
         return *const_cast<T*>(reinterpret_cast<T const*>(data_ + (index_ + d) * bytesPerElement_));
     }
@@ -340,7 +317,8 @@ public:
     }
 
     aligned_row_buffer_iterator(aligned_row_buffer_iterator const&) = default;
-    aligned_row_buffer_iterator& operator =(aligned_row_buffer_iterator const&) = default;
+    aligned_row_buffer_iterator&
+    operator =(aligned_row_buffer_iterator const&) = default;
 
     template <typename U,
               std::enable_if_t<std::is_const<T>::value && !std::is_const<U>::value && std::is_same<U const, T>::value, int> = 0>
@@ -350,7 +328,8 @@ public:
     }
     template <typename U,
               std::enable_if_t<std::is_const<T>::value && !std::is_const<U>::value && std::is_same<U const, T>::value, int> = 0>
-    aligned_row_buffer_iterator& operator =(aligned_row_buffer_iterator const& rhs) noexcept
+    aligned_row_buffer_iterator&
+    operator =(aligned_row_buffer_iterator const& rhs) noexcept
     {
         data_ = rhs.data_;
         index_ = rhs.index_;
@@ -366,91 +345,109 @@ public:
     using difference_type   = std::ptrdiff_t;
     using reference         = gsl::span<T>;
 
-    friend bool operator ==(aligned_row_buffer_iterator const& lhs, aligned_row_buffer_iterator const& rhs)
+    friend bool
+    operator ==(aligned_row_buffer_iterator const& lhs, aligned_row_buffer_iterator const& rhs)
     {
         gsl_Expects(lhs.data_ == rhs.data_);
 
         return lhs.index_ == rhs.index_;
     }
-    friend bool operator !=(aligned_row_buffer_iterator const& lhs, aligned_row_buffer_iterator const& rhs)
+    friend bool
+    operator !=(aligned_row_buffer_iterator const& lhs, aligned_row_buffer_iterator const& rhs)
     {
         return !(lhs == rhs);
     }
-    friend bool operator <(aligned_row_buffer_iterator const& lhs, aligned_row_buffer_iterator const& rhs)
+    friend bool
+    operator <(aligned_row_buffer_iterator const& lhs, aligned_row_buffer_iterator const& rhs)
     {
         gsl_Expects(lhs.data_ == rhs.data_);
 
         return lhs.index_ < rhs.index_;
     }
-    friend bool operator >(aligned_row_buffer_iterator const& lhs, aligned_row_buffer_iterator const& rhs)
+    friend bool
+    operator >(aligned_row_buffer_iterator const& lhs, aligned_row_buffer_iterator const& rhs)
     {
         return rhs < lhs;
     }
-    friend bool operator <=(aligned_row_buffer_iterator const& lhs, aligned_row_buffer_iterator const& rhs)
+    friend bool
+    operator <=(aligned_row_buffer_iterator const& lhs, aligned_row_buffer_iterator const& rhs)
     {
         return !(rhs < lhs);
     }
-    friend bool operator >=(aligned_row_buffer_iterator const& lhs, aligned_row_buffer_iterator const& rhs)
+    friend bool
+    operator >=(aligned_row_buffer_iterator const& lhs, aligned_row_buffer_iterator const& rhs)
     {
         return !(lhs < rhs);
     }
 
-    gsl_NODISCARD reference operator *(void) const
+    gsl_NODISCARD reference
+    operator *(void) const
     {
         return { const_cast<T*>(reinterpret_cast<T const*>(data_ + index_ * bytesPerRow_)), cols_ };
     }
-    aligned_row_buffer_iterator& operator ++(void)
+    aligned_row_buffer_iterator&
+    operator ++(void)
     {
         ++index_;
         return *this;
     }
-    aligned_row_buffer_iterator& operator --(void)
+    aligned_row_buffer_iterator&
+    operator --(void)
     {
         --index_;
         return *this;
     }
-    aligned_row_buffer_iterator operator ++(int)
+    aligned_row_buffer_iterator
+    operator ++(int)
     {
         aligned_row_buffer_iterator result = *this;
         ++index_;
         return result;
     }
-    aligned_row_buffer_iterator operator --(int)
+    aligned_row_buffer_iterator
+    operator --(int)
     {
         aligned_row_buffer_iterator result = *this;
         --index_;
         return result;
     }
-    aligned_row_buffer_iterator& operator +=(difference_type d)
+    aligned_row_buffer_iterator&
+    operator +=(difference_type d)
     {
         index_ += d;
         return *this;
     }
-    aligned_row_buffer_iterator operator +(difference_type d) const
+    aligned_row_buffer_iterator
+    operator +(difference_type d) const
     {
         aligned_row_buffer_iterator result = *this;
         return result += d;
     }
-    friend aligned_row_buffer_iterator operator +(difference_type d, aligned_row_buffer_iterator const& self)
+    friend aligned_row_buffer_iterator
+    operator +(difference_type d, aligned_row_buffer_iterator const& self)
     {
         aligned_row_buffer_iterator result = self;
         return result += d;
     }
-    aligned_row_buffer_iterator& operator -=(difference_type d)
+    aligned_row_buffer_iterator&
+    operator -=(difference_type d)
     {
         index_ -= d;
         return *this;
     }
-    aligned_row_buffer_iterator operator -(difference_type d) const
+    aligned_row_buffer_iterator
+    operator -(difference_type d) const
     {
         aligned_row_buffer_iterator result = *this;
         return result -= d;
     }
-    difference_type operator -(aligned_row_buffer_iterator const& rhs) const
+    difference_type
+    operator -(aligned_row_buffer_iterator const& rhs) const
     {
         return index_ - rhs.index_;
     }
-    reference operator [](difference_type d) const
+    reference
+    operator [](difference_type d) const
     {
         return { const_cast<T*>(reinterpret_cast<T const*>(data_ + (index_ + d) * bytesPerRow_)), cols_ };
     }

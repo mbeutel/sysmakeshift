@@ -21,7 +21,8 @@ struct thread_pool_impl;
 
 struct thread_pool_impl_deleter
 {
-    void operator ()(thread_pool_impl_base* impl);
+    void
+    operator ()(thread_pool_impl_base* impl);
 };
 
 using thread_pool_handle = std::unique_ptr<detail::thread_pool_impl_base, thread_pool_impl_deleter>;

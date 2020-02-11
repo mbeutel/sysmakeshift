@@ -38,7 +38,8 @@ template <typename A> struct has_member_provides_static_alignment<A, gsl::void_t
 
 
 template <typename U>
-constexpr int bit_scan_reverse(U mask)
+constexpr int
+bit_scan_reverse(U mask)
 {
     int result = 0;
     while (mask >>= 1)
@@ -50,7 +51,8 @@ constexpr int bit_scan_reverse(U mask)
 
 constexpr std::size_t special_alignments = std::numeric_limits<std::size_t>::max() & ~(std::numeric_limits<std::size_t>::max() >> 3); // = large_page_alignment | page_alignment | cache_line_alignment
 
-constexpr bool provides_static_alignment(std::size_t alignmentProvided, std::size_t alignmentRequested) noexcept
+constexpr bool
+provides_static_alignment(std::size_t alignmentProvided, std::size_t alignmentRequested) noexcept
 {
     std::size_t highestAlignmentProvided = std::size_t(1) << std::size_t(detail::bit_scan_reverse(alignmentProvided & ~special_alignments)); // only most significant bit
     std::size_t allAlignmentsProvided = alignmentProvided | (highestAlignmentProvided - 1);
@@ -58,9 +60,11 @@ constexpr bool provides_static_alignment(std::size_t alignmentProvided, std::siz
 }
 
 
-std::size_t lookup_special_alignments(std::size_t a) noexcept;
+std::size_t
+lookup_special_alignments(std::size_t a) noexcept;
 
-inline bool provides_dynamic_alignment(std::size_t alignmentProvided, std::size_t alignmentRequested) noexcept
+inline bool
+provides_dynamic_alignment(std::size_t alignmentProvided, std::size_t alignmentRequested) noexcept
 {
     alignmentProvided = detail::lookup_special_alignments(alignmentProvided);
     alignmentRequested = detail::lookup_special_alignments(alignmentRequested);
@@ -71,7 +75,8 @@ inline bool provides_dynamic_alignment(std::size_t alignmentProvided, std::size_
 
 
 template <typename T, typename A, typename... ArgsT>
-T* allocate(A& alloc, ArgsT&&... args)
+T*
+allocate(A& alloc, ArgsT&&... args)
 {
     T* ptr = std::allocator_traits<A>::allocate(alloc, 1);
     auto transaction = detail::make_transaction(
@@ -86,7 +91,8 @@ T* allocate(A& alloc, ArgsT&&... args)
 }
 
 template <typename T, typename A, typename SizeC>
-T* allocate_array_impl(std::true_type /*isNothrowDefaultConstructible*/, A& alloc, SizeC sizeC)
+T*
+allocate_array_impl(std::true_type /*isNothrowDefaultConstructible*/, A& alloc, SizeC sizeC)
 {
     T* ptr = std::allocator_traits<A>::allocate(alloc, std::size_t(sizeC));
     for (std::ptrdiff_t i = 0; i != std::ptrdiff_t(sizeC); ++i)
@@ -96,7 +102,8 @@ T* allocate_array_impl(std::true_type /*isNothrowDefaultConstructible*/, A& allo
     return ptr;
 }
 template <typename T, typename A, typename SizeC>
-T* allocate_array_impl(std::false_type /*isNothrowDefaultConstructible*/, A& alloc, SizeC sizeC)
+T*
+allocate_array_impl(std::false_type /*isNothrowDefaultConstructible*/, A& alloc, SizeC sizeC)
 {
     T* ptr = std::allocator_traits<A>::allocate(alloc, std::size_t(sizeC));
     std::ptrdiff_t i = 0;
@@ -117,23 +124,35 @@ T* allocate_array_impl(std::false_type /*isNothrowDefaultConstructible*/, A& all
     return ptr;
 }
 template <typename T, typename A, typename SizeC>
-T* allocate_array(A& alloc, SizeC sizeC)
+T*
+allocate_array(A& alloc, SizeC sizeC)
 {
     return detail::allocate_array_impl<T>(std::is_nothrow_default_constructible<T>{ }, alloc, sizeC);
 }
 
 
-void* aligned_alloc(std::size_t size, std::size_t alignment);
-void aligned_free(void* data, std::size_t size, std::size_t alignment) noexcept;
+void*
+aligned_alloc(std::size_t size, std::size_t alignment);
+void
+aligned_free(void* data, std::size_t size, std::size_t alignment) noexcept;
 
-//#ifdef __linux__
-//void advise_large_pages(void* addr, std::size_t size);
-//#endif // __linux__
+void*
+large_page_alloc(std::size_t size);
+void
+large_page_free(void* data, std::size_t size) noexcept;
 
-std::size_t alignment_in_bytes(std::size_t a) noexcept;
+void*
+page_alloc(std::size_t size);
+void
+page_free(void* data, std::size_t size) noexcept;
+
+
+std::size_t
+alignment_in_bytes(std::size_t a) noexcept;
 
 template <typename T>
-constexpr bool is_alignment_power_of_2(T value) noexcept
+constexpr bool
+is_alignment_power_of_2(T value) noexcept
 {
     return value > 0
         && (value & (value - 1)) == 0;
@@ -148,12 +167,14 @@ class aligned_allocator_adaptor_base<T, Alignment, A, true> : public A
 public:
     using A::A;
 
-    gsl_NODISCARD static constexpr bool provides_static_alignment(std::size_t a) noexcept
+    gsl_NODISCARD static constexpr bool
+    provides_static_alignment(std::size_t a) noexcept
     {
         return detail::provides_static_alignment(Alignment, a);
     }
 
-    gsl_NODISCARD T* allocate(std::size_t n)
+    gsl_NODISCARD T*
+    allocate(std::size_t n)
     {
         std::size_t a = detail::alignment_in_bytes(Alignment | alignof(T));
         if (n >= std::numeric_limits<std::size_t>::max() / sizeof(T)) throw std::bad_alloc{ }; // overflow
@@ -173,7 +194,8 @@ public:
 
         return static_cast<T*>(alignResult);
     }
-    void deallocate(T* ptr, std::size_t n) noexcept
+    void
+    deallocate(T* ptr, std::size_t n) noexcept
     {
         std::size_t a = detail::alignment_in_bytes(Alignment | alignof(T));
         std::size_t nbData = n * sizeof(T); // cannot overflow due to preceding check in `allocate()`

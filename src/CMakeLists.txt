@@ -13,6 +13,7 @@ find_package(gsl-lite 0.36 REQUIRED)
 
 # library target
 add_library(sysmakeshift STATIC
+    "errors.cpp"
     "fenv.cpp"
     "memory.cpp"
     "new.cpp"

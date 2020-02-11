@@ -33,7 +33,8 @@ public:
         }
     }
 
-    constexpr void commit(void) noexcept
+    constexpr void
+    commit(void) noexcept
     {
         done_ = true;
     }
@@ -43,7 +44,8 @@ public:
     {
 
     }
-    transaction_t& operator =(transaction_t&&) = delete;
+    transaction_t&
+    operator =(transaction_t&&) = delete;
 };
 class no_op_transaction_t
 {
@@ -58,17 +60,20 @@ public:
     no_op_transaction_t& operator =(no_op_transaction_t&&) = delete;
 };
 template <typename RollbackFuncT>
-constexpr transaction_t<RollbackFuncT> make_transaction(RollbackFuncT rollbackFunc)
+constexpr transaction_t<RollbackFuncT>
+make_transaction(RollbackFuncT rollbackFunc)
 {
     return { std::move(rollbackFunc) };
 }
 template <typename RollbackFuncT>
-constexpr transaction_t<RollbackFuncT> make_transaction(std::true_type /*enableRollback*/, RollbackFuncT rollbackFunc)
+constexpr transaction_t<RollbackFuncT>
+make_transaction(std::true_type /*enableRollback*/, RollbackFuncT rollbackFunc)
 {
     return { std::move(rollbackFunc) };
 }
 template <typename RollbackFuncT>
-constexpr no_op_transaction_t make_transaction(std::false_type /*enableRollback*/, RollbackFuncT)
+constexpr no_op_transaction_t
+make_transaction(std::false_type /*enableRollback*/, RollbackFuncT)
 {
     return { };
 }

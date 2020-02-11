@@ -29,7 +29,7 @@
 # include <pthread.h> // pthread_self(), pthread_setaffinity_np()
 #else
 # error Unsupported operating system.
-#endif // _WIN32
+#endif
 
 #if defined(_WIN32) || defined(USE_PTHREAD_SETAFFINITY)
 # define THREAD_PINNING_SUPPORTED
@@ -40,47 +40,12 @@
 #include <sysmakeshift/thread_pool.hpp>
 #include <sysmakeshift/buffer.hpp>      // for aligned_buffer<>
 
+#include <sysmakeshift/detail/errors.hpp>
+
 
 namespace sysmakeshift {
 
 namespace detail {
-
-
-void
-posixCheck(int errorCode)
-{
-    if (errorCode != 0)
-    {
-        throw std::system_error(std::error_code(errorCode, std::generic_category()));
-    }
-}
-void
-posixAssert(bool success)
-{
-    if (!success)
-    {
-        posixCheck(errno);
-    }
-}
-
-#ifdef _WIN32
-void
-win32Check(DWORD errorCode)
-{
-    if (errorCode != ERROR_SUCCESS)
-    {
-        throw std::system_error(std::error_code(errorCode, std::system_category())); // TODO: does this work correctly?
-    }
-}
-void
-win32Assert(BOOL success)
-{
-    if (!success)
-    {
-        win32Check(::GetLastError());
-    }
-}
-#endif // _WIN32
 
 
 #if defined(_WIN32)
@@ -203,11 +168,11 @@ setThreadAffinity(std::thread::native_handle_type handle, std::size_t coreIdx)
     {
         throw std::range_error("cannot currently handle more than 8*sizeof(void*) CPUs on Windows");
     }
-    win32Assert(SetThreadAffinityMask((HANDLE) handle, DWORD_PTR(1) << coreIdx) != 0);
+    detail::win32_assert(SetThreadAffinityMask((HANDLE) handle, DWORD_PTR(1) << coreIdx) != 0);
 # elif defined(USE_PTHREAD_SETAFFINITY)
     cpu_set cpuSet;
     cpuSet.set_cpu_flag(coreIdx);
-    posixCheck(::pthread_setaffinity_np((pthread_t) handle, cpuSet.size(), cpuSet.data()));
+    detail::posix_check(::pthread_setaffinity_np((pthread_t) handle, cpuSet.size(), cpuSet.data()));
 # else
 #  error Unsupported operating system.
 # endif
@@ -220,7 +185,7 @@ setThreadAttrAffinity(pthread_attr_t& attr, std::size_t coreIdx)
 {
     cpu_set cpuSet;
     cpuSet.set_cpu_flag(coreIdx);
-    posixCheck(::pthread_attr_setaffinity_np(&attr, cpuSet.size(), cpuSet.data()));
+    detail::posix_check(::pthread_attr_setaffinity_np(&attr, cpuSet.size(), cpuSet.data()));
 }
 #endif // USE_PTHREAD_SETAFFINITY
 
@@ -299,11 +264,11 @@ struct PThreadAttr
 
     PThreadAttr(void)
     {
-        posixCheck(::pthread_attr_init(&attr));
+        detail::posix_check(::pthread_attr_init(&attr));
     }
     ~PThreadAttr(void)
     {
-        posixCheck(::pthread_attr_destroy(&attr));
+        detail::posix_check(::pthread_attr_destroy(&attr));
     }
 };
 #else
@@ -461,14 +426,14 @@ private:
                 lhandles[j] = handles_[i + j].get();
             }
             DWORD result = ::WaitForMultipleObjects(n, lhandles, TRUE, INFINITE);
-            detail::win32Assert(result != WAIT_FAILED);
+            detail::win32_assert(result != WAIT_FAILED);
             i += n;
         }
 #elif defined(USE_PTHREAD)
             // Join threads. It is possible that this can be improved with a tree-like wait chain.
         for (int i = 0; i < numThreads_; ++i)
         {
-            detail::posixCheck(::pthread_join(handles_[i].get(), NULL));
+            detail::posix_check(::pthread_join(handles_[i].get(), NULL));
             handles_[i].release();
         }
 #else
@@ -510,7 +475,7 @@ public:
         {
             auto handle = detail::win32_handle(
                 (HANDLE) ::_beginthreadex(NULL, 0, &thread_pool_thread::threadFunc, &data_[i], threadCreationFlags, nullptr));
-            detail::win32Assert(handle != nullptr);
+            detail::win32_assert(handle != nullptr);
             if (p.pin_to_hardware_threads)
             {
                 detail::setThreadAffinity(handle.get(), getHardwareThreadId(i, p.max_num_hardware_threads, p.hardware_thread_mappings));
@@ -552,7 +517,7 @@ public:
         for (int i = 0; i < numThreads_; ++i)
         {
             DWORD result = ::ResumeThread(handles_[i].get());
-            detail::win32Assert(result != DWORD(-1));
+            detail::win32_assert(result != DWORD(-1));
         }
 #elif defined(USE_PTHREAD)
             // Create threads; set core affinity if desired.
@@ -566,7 +531,7 @@ public:
             }
 # endif // defined(USE_PTHREAD_SETAFFINITY)
             auto handle = pthread_t{ };
-            detail::posixCheck(::pthread_create(&handle, &attr.attr, &thread_pool_thread::threadFunc, &data_[i]));
+            detail::posix_check(::pthread_create(&handle, &attr.attr, &thread_pool_thread::threadFunc, &data_[i]));
             handles_[i] = pthread_handle(handle);
         }
 

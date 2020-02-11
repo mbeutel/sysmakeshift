@@ -14,6 +14,7 @@
 
 #include <sysmakeshift/memory.hpp> // for aligned_allocator_adaptor<>
 
+#include <sysmakeshift/detail/arithmetic.hpp>  // for try_multiply_unsigned(), try_ceili()
 #include <sysmakeshift/detail/buffer.hpp>
 #include <sysmakeshift/detail/transaction.hpp>
 
@@ -55,7 +56,7 @@ private:
     static std::size_t
     computeBytesPerElement(void)
     {
-        auto bytesPerElementR = detail::ceili(sizeof(T), detail::alignment_in_bytes(Alignment | alignof(T)));
+        auto bytesPerElementR = detail::try_ceili(sizeof(T), detail::alignment_in_bytes(Alignment | alignof(T)));
         if (bytesPerElementR.ec != std::errc{ }) throw std::bad_alloc{ };
         return bytesPerElementR.value;
     }
@@ -70,7 +71,7 @@ private:
         }
         else
         {
-            auto numBytesR = detail::multiply_unsigned(_size, bytesPerElement_);
+            auto numBytesR = detail::try_multiply_unsigned(_size, bytesPerElement_);
             if (numBytesR.ec != std::errc{ }) throw std::bad_alloc{ };
             std::size_t numBytes = numBytesR.value;
 
@@ -292,9 +293,9 @@ private:
     aligned_row_buffer(internal_constructor, std::size_t _rows, std::size_t _cols, allocator_type _allocator, Ts&&... args)
         : allocator_type(std::move(_allocator)), rows_(_rows), cols_(_cols)
     {
-        auto rawBytesPerRowR = detail::multiply_unsigned(sizeof(T), _cols);
-        auto bytesPerRowR = detail::ceili(rawBytesPerRowR.value, detail::alignment_in_bytes(Alignment | alignof(T)));
-        auto numBytesR = detail::multiply_unsigned(_rows, bytesPerRowR.value);
+        auto rawBytesPerRowR = detail::try_multiply_unsigned(sizeof(T), _cols);
+        auto bytesPerRowR = detail::try_ceili(rawBytesPerRowR.value, detail::alignment_in_bytes(Alignment | alignof(T)));
+        auto numBytesR = detail::try_multiply_unsigned(_rows, bytesPerRowR.value);
         if (rawBytesPerRowR.ec != std::errc{ } || bytesPerRowR.ec != std::errc{ } || numBytesR.ec != std::errc{ }) throw std::bad_alloc{ };
         bytesPerRow_ = bytesPerRowR.value;
 
