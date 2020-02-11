@@ -17,7 +17,7 @@ add_library(sysmakeshift STATIC
     "fenv.cpp"
     "memory.cpp"
     "new.cpp"
-    "thread_pool.cpp")
+    "thread_squad.cpp")
 
 # library properties
 target_include_directories(sysmakeshift

@@ -1,6 +1,6 @@
 
-#ifndef INCLUDED_SYSMAKESHIFT_THREAD_POOL_HPP_
-#define INCLUDED_SYSMAKESHIFT_THREAD_POOL_HPP_
+#ifndef INCLUDED_SYSMAKESHIFT_THREAD_SQUAD_HPP_
+#define INCLUDED_SYSMAKESHIFT_THREAD_SQUAD_HPP_
 
 
 #include <thread>
@@ -11,7 +11,7 @@
 
 #include <gsl-lite/gsl-lite.hpp> // for span<>, not_null<>, ssize(), gsl_NODISCARD
 
-#include <sysmakeshift/detail/thread_pool.hpp>
+#include <sysmakeshift/detail/thread_squad.hpp>
 
 
 namespace sysmakeshift {
@@ -21,13 +21,13 @@ namespace gsl = ::gsl_lite;
 
 
     //
-    // Simple thread pool with support for thread core affinity.
+    // Simple thread squad with support for thread core affinity.
     //
-class thread_pool
+class thread_squad
 {
 public:
         //
-        // Thread pool parameters.
+        // Thread squad parameters.
         //
     struct params
     {
@@ -51,7 +51,7 @@ public:
         int max_num_hardware_threads = 0;
 
             //
-            // Maps thread indices to hardware thread ids. If empty, the thread pool uses thread indices as hardware thread ids.
+            // Maps thread indices to hardware thread ids. If empty, the thread squad uses thread indices as hardware thread ids.
             //ᅟ
             // If non-empty and if `max_num_hardware_threads == 0`, `hardware_thread_mappings.size()` is taken as the maximal number of hardware threads to pin threads to.
             //
@@ -59,18 +59,18 @@ public:
     };
 
         //
-        // State passed to tasks that are executed in thread pool.
+        // State passed to tasks that are executed in thread squad.
         //
     class task_context
     {
-        friend detail::thread_pool_thread;
-        friend detail::thread_pool_impl;
+        friend detail::thread_squad_thread;
+        friend detail::thread_squad_impl;
 
     private:
-        detail::thread_pool_impl_base& impl_;
+        detail::thread_squad_impl_base& impl_;
         int threadIdx_;
 
-        explicit task_context(detail::thread_pool_impl_base& _impl, int _threadIdx) noexcept
+        explicit task_context(detail::thread_squad_impl_base& _impl, int _threadIdx) noexcept
             : impl_(_impl), threadIdx_(_threadIdx)
         {
         }
@@ -96,7 +96,7 @@ public:
     };
 
 private:
-    gsl::not_null<detail::thread_pool_handle> handle_;
+    gsl::not_null<detail::thread_squad_handle> handle_;
 
     static params const&
     check_params(params const& p)
@@ -107,20 +107,20 @@ private:
         return p;
     }
 
-    static detail::thread_pool_handle create(thread_pool::params p);
+    static detail::thread_squad_handle create(thread_squad::params p);
     std::future<void> do_run(std::function<void(task_context)> task, int concurrency, bool join);
 
 public:
-    explicit thread_pool(params const& p)
+    explicit thread_squad(params const& p)
         : handle_(create(check_params(p)))
     {
     }
 
-    thread_pool(thread_pool&&) noexcept = default;
-    thread_pool& operator =(thread_pool&&) noexcept = default;
+    thread_squad(thread_squad&&) noexcept = default;
+    thread_squad& operator =(thread_squad&&) noexcept = default;
 
-    thread_pool(thread_pool const&) = delete;
-    thread_pool& operator =(thread_pool const&) = delete;
+    thread_squad(thread_squad const&) = delete;
+    thread_squad& operator =(thread_squad const&) = delete;
 
         //
         // The number of concurrent threads.
@@ -130,9 +130,9 @@ public:
         //
         // Runs the given action on as many threads as indicated by `concurrency`, and waits until all tasks have run to completion.
         //ᅟ
-        // `concurrency == 0` indicates that the maximum concurrency level should be used, i.e. the task is run on all threads in the thread pool.
-        // `concurrency` may not exceed the number of threads in the thread pool.
-        // The thread pool makes a dedicated copy of `action` for every participating thread and invokes it with an appropriate task context.
+        // `concurrency == 0` indicates that the maximum concurrency level should be used, i.e. the task is run on all threads in the thread squad.
+        // `concurrency` may not exceed the number of threads in the thread squad.
+        // The thread squad makes a dedicated copy of `action` for every participating thread and invokes it with an appropriate task context.
         // If `action()` throws an exception, `std::terminate()` is called.
         //
     void
@@ -147,9 +147,9 @@ public:
         //
         // Runs the given action on as many threads as indicated by `concurrency`, and waits until all tasks have run to completion.
         //ᅟ
-        // `concurrency == 0` indicates that the maximum concurrency level should be used, i.e. the task is run on all threads in the thread pool.
-        // `concurrency` may not exceed the number of threads in the thread pool.
-        // The thread pool makes a dedicated copy of `action` for every participating thread and invokes it with an appropriate task context.
+        // `concurrency == 0` indicates that the maximum concurrency level should be used, i.e. the task is run on all threads in the thread squad.
+        // `concurrency` may not exceed the number of threads in the thread squad.
+        // The thread squad makes a dedicated copy of `action` for every participating thread and invokes it with an appropriate task context.
         // If `action()` throws an exception, `std::terminate()` is called.
         //
     void
@@ -165,9 +165,9 @@ public:
         // Runs the given action on as many threads as indicated by `concurrency`, and returns a `std::future<void>` which
         // represents the completion state of the tasks.
         //ᅟ
-        // `concurrency == 0` indicates that the maximum concurrency level should be used, i.e. the task is run on all threads in the thread pool.
-        // `concurrency` may not exceed the number of threads in the thread pool.
-        // The thread pool makes a dedicated copy of `action` for every participating thread and invokes it with an appropriate task context.
+        // `concurrency == 0` indicates that the maximum concurrency level should be used, i.e. the task is run on all threads in the thread squad.
+        // `concurrency` may not exceed the number of threads in the thread squad.
+        // The thread squad makes a dedicated copy of `action` for every participating thread and invokes it with an appropriate task context.
         // If `action()` throws an exception, `std::terminate()` is called.
         //
     gsl_NODISCARD std::future<void>
@@ -183,9 +183,9 @@ public:
         // Runs the given action on as many threads as indicated by `concurrency`, and returns a `std::future<void>` which
         // represents the completion state of the tasks.
         //ᅟ
-        // `concurrency == 0` indicates that the maximum concurrency level should be used, i.e. the task is run on all threads in the thread pool.
-        // `concurrency` may not exceed the number of threads in the thread pool.
-        // The thread pool makes a dedicated copy of `action` for every participating thread and invokes it with an appropriate task context.
+        // `concurrency == 0` indicates that the maximum concurrency level should be used, i.e. the task is run on all threads in the thread squad.
+        // `concurrency` may not exceed the number of threads in the thread squad.
+        // The thread squad makes a dedicated copy of `action` for every participating thread and invokes it with an appropriate task context.
         // If `action()` throws an exception, `std::terminate()` is called.
         //
     gsl_NODISCARD std::future<void>
@@ -202,4 +202,4 @@ public:
 } // namespace sysmakeshift
 
 
-#endif // INCLUDED_SYSMAKESHIFT_THREAD_POOL_HPP_
+#endif // INCLUDED_SYSMAKESHIFT_THREAD_SQUAD_HPP_

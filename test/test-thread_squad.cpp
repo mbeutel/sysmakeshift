@@ -1,5 +1,5 @@
 
-#include <sysmakeshift/thread_pool.hpp>
+#include <sysmakeshift/thread_squad.hpp>
 
 #include <thread>
 #include <mutex>
@@ -15,7 +15,7 @@
 
 
 
-TEST_CASE("thread_pool can schedule single task")
+TEST_CASE("thread_squad can schedule single task")
 {
     GENERATE(range(0, 20)); // repetitions
 
@@ -30,7 +30,7 @@ TEST_CASE("thread_pool can schedule single task")
     std::unordered_set<std::thread::id> threadIds;
     std::unordered_set<int> threadIndices;
 
-    auto params = sysmakeshift::thread_pool::params{
+    auto params = sysmakeshift::thread_squad::params{
         /*.num_threads = */ numThreads
     };
 #ifdef THREAD_PINNING_SUPPORTED
@@ -38,7 +38,7 @@ TEST_CASE("thread_pool can schedule single task")
 #endif // !THREAD_PINNING_SUPPORTED
 
     auto action = [&]
-    (sysmakeshift::thread_pool::task_context ctx)
+    (sysmakeshift::thread_squad::task_context ctx)
     {
         auto lock = std::unique_lock<std::mutex>(mutex);
         threadIds.insert(std::this_thread::get_id());
@@ -47,11 +47,11 @@ TEST_CASE("thread_pool can schedule single task")
 
     SECTION("with synchronous completion")
     {
-        sysmakeshift::thread_pool(params).run(action);
+        sysmakeshift::thread_squad(params).run(action);
     }
     SECTION("with asynchronous completion")
     {
-        auto completion = sysmakeshift::thread_pool(params).run_async(action);
+        auto completion = sysmakeshift::thread_squad(params).run_async(action);
         completion.wait();
     }
 
@@ -63,7 +63,7 @@ TEST_CASE("thread_pool can schedule single task")
     CHECK(threadIndices.size() == static_cast<std::size_t>(numActualThreads));
 }
 
-TEST_CASE("thread_pool can schedule multiple tasks")
+TEST_CASE("thread_squad can schedule multiple tasks")
 {
     GENERATE(range(0, 10)); // repetitions
 
@@ -80,7 +80,7 @@ TEST_CASE("thread_pool can schedule multiple tasks")
     std::unordered_map<std::thread::id, int> threadId_Count;
     std::unordered_map<int, int> threadIndex_Count;
 
-    auto params = sysmakeshift::thread_pool::params{
+    auto params = sysmakeshift::thread_squad::params{
         /*.num_threads = */ numThreads
     };
 #ifdef THREAD_PINNING_SUPPORTED
@@ -88,7 +88,7 @@ TEST_CASE("thread_pool can schedule multiple tasks")
 #endif // !THREAD_PINNING_SUPPORTED
 
     auto action = [&]
-    (sysmakeshift::thread_pool::task_context ctx)
+    (sysmakeshift::thread_squad::task_context ctx)
     {
         auto lock = std::unique_lock<std::mutex>(mutex);
         ++threadId_Count[std::this_thread::get_id()];
@@ -97,19 +97,19 @@ TEST_CASE("thread_pool can schedule multiple tasks")
 
     SECTION("with synchronous completion")
     {
-        auto threadPool = sysmakeshift::thread_pool(params);
+        auto threadSquad = sysmakeshift::thread_squad(params);
         for (int i = 0; i < numTasks; ++i)
         {
-            threadPool.run(action);
+            threadSquad.run(action);
         }
     }
     SECTION("with asynchronous completion")
     {
         std::vector<std::future<void>> completions;
-        auto threadPool = sysmakeshift::thread_pool(params);
+        auto threadSquad = sysmakeshift::thread_squad(params);
         for (int i = 0; i < numTasks; ++i)
         {
-            completions.push_back(threadPool.run_async(action));
+            completions.push_back(threadSquad.run_async(action));
         }
         for (auto& completion : completions)
         {

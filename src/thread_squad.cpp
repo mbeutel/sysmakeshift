@@ -37,7 +37,7 @@
 
 #include <gsl-lite/gsl-lite.hpp> // for narrow<>(), narrow_cast<>(), span<>
 
-#include <sysmakeshift/thread_pool.hpp>
+#include <sysmakeshift/thread_squad.hpp>
 #include <sysmakeshift/buffer.hpp>      // for aligned_buffer<>
 
 #include <sysmakeshift/detail/errors.hpp>
@@ -277,7 +277,7 @@ struct PThreadAttr
 
 
 #ifdef _WIN32
-static std::atomic<unsigned> threadPoolCounter{ };
+static std::atomic<unsigned> threadSquadCounter{ };
 #endif // _WIN32
 
 
@@ -337,22 +337,22 @@ public:
 };
 
 
-struct thread_pool_job
+struct thread_squad_job
 {
-    std::function<void(thread_pool::task_context)> action;
+    std::function<void(thread_squad::task_context)> action;
     mutable std::optional<std::promise<void>> completion; // mutable because otherwise we cannot fulfill the promise
     int concurrency = 0;
     bool last = false;
-    std::shared_future<std::optional<thread_pool_job>> nextJob;
+    std::shared_future<std::optional<thread_squad_job>> nextJob;
 };
 
-struct thread_pool_thread
+struct thread_squad_thread
 {
-    thread_pool_impl& impl_;
-    std::shared_future<std::optional<thread_pool_job>> nextJob_;
+    thread_squad_impl& impl_;
+    std::shared_future<std::optional<thread_squad_job>> nextJob_;
     int threadIdx_;
 
-    thread_pool_thread(thread_pool_impl& _impl, std::shared_future<std::optional<thread_pool_job>> const& _nextJob) noexcept
+    thread_squad_thread(thread_squad_impl& _impl, std::shared_future<std::optional<thread_squad_job>> const& _nextJob) noexcept
         : impl_(_impl),
           nextJob_(_nextJob),
           threadIdx_(0) // to be set afterwards
@@ -373,7 +373,7 @@ struct thread_pool_thread
 #endif // _WIN32
 };
 
-struct thread_pool_impl : thread_pool_impl_base
+struct thread_squad_impl : thread_squad_impl_base
 {
 private:
 #if defined(_WIN32)
@@ -385,10 +385,10 @@ private:
 #endif // _WIN32
 
     barrier barrier_;
-    std::promise<std::optional<thread_pool_job>> nextJob_;
-    aligned_buffer<thread_pool_thread, cache_line_alignment> data_;
+    std::promise<std::optional<thread_squad_job>> nextJob_;
+    aligned_buffer<thread_squad_thread, cache_line_alignment> data_;
 #ifdef _WIN32
-    unsigned threadPoolId_; // for runtime thread identification during debugging
+    unsigned threadSquadId_; // for runtime thread identification during debugging
 #endif // _WIN32
     bool running_;
 #ifdef USE_PTHREAD
@@ -412,7 +412,7 @@ private:
     void
     join_threads_and_free(void) noexcept // We cannot really handle join failure.
     {
-        auto self = std::unique_ptr<thread_pool_impl>(this);
+        auto self = std::unique_ptr<thread_squad_impl>(this);
         
 #if defined(_WIN32)
             // Join threads.
@@ -447,18 +447,18 @@ private:
         nextJob_.set_value(std::nullopt);
         if (completion != nullptr)
         {
-            *completion = std::async(std::launch::deferred, &thread_pool_impl::join_threads_and_free, this);
+            *completion = std::async(std::launch::deferred, &thread_squad_impl::join_threads_and_free, this);
         }
     }
 
 public:
-    thread_pool_impl(thread_pool::params const& p)
-        : thread_pool_impl_base{ p.num_threads },
+    thread_squad_impl(thread_squad::params const& p)
+        : thread_squad_impl_base{ p.num_threads },
           barrier_(p.num_threads),
           nextJob_{ },
           data_(gsl::narrow<std::size_t>(p.num_threads), std::in_place, *this, nextJob_.get_future().share()),
 #ifdef _WIN32
-          threadPoolId_(threadPoolCounter++),
+          threadSquadId_(threadSquadCounter++),
 #endif // _WIN32
           running_(false)
     {
@@ -474,7 +474,7 @@ public:
         for (int i = 0; i < p.num_threads; ++i)
         {
             auto handle = detail::win32_handle(
-                (HANDLE) ::_beginthreadex(NULL, 0, &thread_pool_thread::threadFunc, &data_[i], threadCreationFlags, nullptr));
+                (HANDLE) ::_beginthreadex(NULL, 0, &thread_squad_thread::threadFunc, &data_[i], threadCreationFlags, nullptr));
             detail::win32_assert(handle != nullptr);
             if (p.pin_to_hardware_threads)
             {
@@ -503,7 +503,7 @@ public:
 
 #ifdef _WIN32
     unsigned
-    thread_pool_id(void) const noexcept { return threadPoolId_; }
+    thread_squad_id(void) const noexcept { return threadSquadId_; }
 #endif // _WIN32
 
     void
@@ -531,7 +531,7 @@ public:
             }
 # endif // defined(USE_PTHREAD_SETAFFINITY)
             auto handle = pthread_t{ };
-            detail::posix_check(::pthread_create(&handle, &attr.attr, &thread_pool_thread::threadFunc, &data_[i]));
+            detail::posix_check(::pthread_create(&handle, &attr.attr, &thread_squad_thread::threadFunc, &data_[i]));
             handles_[i] = pthread_handle(handle);
         }
 
@@ -545,7 +545,7 @@ public:
     }
 
     void
-    schedule_job(std::future<void>* completion, std::function<void(thread_pool::task_context)> action, int concurrency, bool last) noexcept // We cannot really handle failure in future chaining.
+    schedule_job(std::future<void>* completion, std::function<void(thread_squad::task_context)> action, int concurrency, bool last) noexcept // We cannot really handle failure in future chaining.
     {
         auto completionPromise = std::optional<std::promise<void>>{ };
         if (completion != nullptr)
@@ -553,8 +553,8 @@ public:
             completionPromise = std::promise<void>{ };
             *completion = completionPromise->get_future();
         }
-        auto nextJobPromise = std::promise<std::optional<thread_pool_job>>{ };
-        nextJob_.set_value(thread_pool_job{ std::move(action), std::move(completionPromise), concurrency, last, nextJobPromise.get_future().share() });
+        auto nextJobPromise = std::promise<std::optional<thread_squad_job>>{ };
+        nextJob_.set_value(thread_squad_job{ std::move(action), std::move(completionPromise), concurrency, last, nextJobPromise.get_future().share() });
         nextJob_ = std::move(nextJobPromise);
 #ifdef USE_PTHREAD
         needLaunch_ = true;
@@ -601,15 +601,15 @@ public:
 };
 
     // Like the parallel overloads of the standard algorithms, we terminate (implicitly) if an exception is thrown
-    // by a thread pool job because the semantics of exceptions in multiplexed actions are unclear.
+    // by a thread squad job because the semantics of exceptions in multiplexed actions are unclear.
 static void
-runJob(std::function<void(thread_pool::task_context)> action, thread_pool::task_context arg) noexcept
+runJob(std::function<void(thread_squad::task_context)> action, thread_squad::task_context arg) noexcept
 {
     action(arg);
 }
 
 void
-thread_pool_thread::operator ()(void)
+thread_squad_thread::operator ()(void)
 {
     for (;;)
     {
@@ -628,7 +628,7 @@ thread_pool_thread::operator ()(void)
         }
         if (threadIdx_ < concurrency)
         {
-            runJob(job->action, thread_pool::task_context{ impl_, threadIdx_ });
+            runJob(job->action, thread_squad::task_context{ impl_, threadIdx_ });
         }
 
         if (!job->last || job->completion.has_value())
@@ -648,13 +648,13 @@ thread_pool_thread::operator ()(void)
 
 #if defined(_WIN32)
 unsigned __stdcall
-thread_pool_thread::threadFunc(void* data)
+thread_squad_thread::threadFunc(void* data)
 {
-    thread_pool_thread& self = *static_cast<thread_pool_thread*>(data);
+    thread_squad_thread& self = *static_cast<thread_squad_thread*>(data);
     {
         wchar_t buf[64];
-        std::swprintf(buf, sizeof buf / sizeof(wchar_t), L"sysmakeshift thread pool #%d, thread %d",
-            self.impl_.thread_pool_id(), self.threadIdx_);
+        std::swprintf(buf, sizeof buf / sizeof(wchar_t), L"sysmakeshift thread squad #%d, thread %d",
+            self.impl_.thread_squad_id(), self.threadIdx_);
         detail::setCurrentThreadDescription(buf);
     }
     self();
@@ -662,9 +662,9 @@ thread_pool_thread::threadFunc(void* data)
 }
 #elif defined(USE_PTHREAD)
 void*
-thread_pool_thread::threadFunc(void* data)
+thread_squad_thread::threadFunc(void* data)
 {
-    thread_pool_thread& self = *static_cast<thread_pool_thread*>(data);
+    thread_squad_thread& self = *static_cast<thread_squad_thread*>(data);
     self();
     return nullptr;
 }
@@ -674,17 +674,17 @@ thread_pool_thread::threadFunc(void* data)
 
 
 void
-thread_pool_impl_deleter::operator ()(thread_pool_impl_base* impl)
+thread_squad_impl_deleter::operator ()(thread_squad_impl_base* impl)
 {
-    static_cast<detail::thread_pool_impl*>(impl)->close_and_free(nullptr);
+    static_cast<detail::thread_squad_impl*>(impl)->close_and_free(nullptr);
 }
 
 
 } // namespace detail
 
 
-detail::thread_pool_handle
-thread_pool::create(thread_pool::params p)
+detail::thread_squad_handle
+thread_squad::create(thread_squad::params p)
 {
         // Replace placeholder arguments with appropriate default values.
     int hardwareConcurrency = gsl::narrow<int>(std::thread::hardware_concurrency());
@@ -710,18 +710,18 @@ thread_pool::create(thread_pool::params p)
     }
 #endif // !THREAD_PINNING_SUPPORTED
 
-    return detail::thread_pool_handle(new detail::thread_pool_impl(p));
+    return detail::thread_squad_handle(new detail::thread_squad_impl(p));
 }
 
 std::future<void>
-thread_pool::do_run(std::function<void(task_context)> action, int concurrency, bool join)
+thread_squad::do_run(std::function<void(task_context)> action, int concurrency, bool join)
 {
     std::future<void> completion;
-    auto& impl = static_cast<detail::thread_pool_impl&>(*handle_.get());
+    auto& impl = static_cast<detail::thread_squad_impl&>(*handle_.get());
     impl.schedule_job(join ? nullptr : &completion, std::move(action), concurrency, join);
     if (join)
     {
-        auto lhandle = detail::thread_pool_handle(std::move(handle_));
+        auto lhandle = detail::thread_squad_handle(std::move(handle_));
         lhandle.release();
         impl.close_and_free(&completion);
     }
