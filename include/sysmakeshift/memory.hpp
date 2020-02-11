@@ -234,6 +234,128 @@ operator !=(aligned_allocator<T, Alignment> x, aligned_allocator<U, Alignment> y
 
 
     //
+    // Obtains page-granular allocations directly from the operating system.
+    //ᅟ
+    // On Linux, transparent huge pages are suppressed for allocations made by this allocator.
+    //
+template <typename T>
+class page_allocator
+{
+public:
+    using value_type = T;
+
+    template <typename U>
+    struct rebind
+    {
+        using other = page_allocator<U>;
+    };
+
+    constexpr page_allocator(void) noexcept
+    {
+    }
+    template <typename U>
+    constexpr page_allocator(page_allocator<U> const&) noexcept
+    {
+    }
+
+    gsl_NODISCARD static constexpr bool
+    provides_static_alignment(std::size_t a) noexcept
+    {
+        return sysmakeshift::provides_static_alignment(page_alignment, a);
+    }
+
+    gsl_NODISCARD T*
+    allocate(std::size_t n)
+    {
+        if (n >= std::numeric_limits<std::size_t>::max() / sizeof(T)) throw std::bad_alloc{ }; // overflow
+        std::size_t nbData = n * sizeof(T);
+        return static_cast<T*>(detail::page_alloc(nbData));
+    }
+    void
+    deallocate(T* ptr, std::size_t n) noexcept
+    {
+        std::size_t nbData = n * sizeof(T); // cannot overflow due to preceding check in allocate()
+        detail::page_free(ptr, nbData);
+    }
+};
+
+template <typename T, typename U>
+gsl_NODISCARD bool
+operator ==(page_allocator<T>, page_allocator<U>) noexcept
+{
+    return true;
+}
+template <typename T, typename U>
+gsl_NODISCARD bool
+operator !=(page_allocator<T> x, page_allocator<U> y) noexcept
+{
+    return !(x == y);
+}
+
+
+    //
+    // Large page allocator.
+    //ᅟ
+    // Uses transparent huge pages on Linux and explicit large page allocation on Windows.
+    // Note that processes on Windows need to obtain SeLockMemoryPrivilege in order to use large pages, cf. https://docs.microsoft.com/en-us/windows/win32/memory/large-page-support.
+    //
+template <typename T>
+class large_page_allocator
+{
+public:
+    using value_type = T;
+
+    template <typename U>
+    struct rebind
+    {
+        using other = large_page_allocator<U>;
+    };
+
+    constexpr large_page_allocator(void) noexcept
+    {
+    }
+    template <typename U>
+    constexpr large_page_allocator(large_page_allocator<U> const&) noexcept
+    {
+    }
+
+    gsl_NODISCARD static constexpr bool
+    provides_static_alignment(std::size_t a) noexcept
+    {
+            // We cannot guarantee 
+        return sysmakeshift::provides_static_alignment(page_alignment, a);
+    }
+
+    gsl_NODISCARD T*
+    allocate(std::size_t n)
+    {
+        if (n >= std::numeric_limits<std::size_t>::max() / sizeof(T)) throw std::bad_alloc{ }; // overflow
+        std::size_t nbData = n * sizeof(T);
+        return static_cast<T*>(detail::large_page_alloc(nbData));
+    }
+    void
+    deallocate(T* ptr, std::size_t n) noexcept
+    {
+        std::size_t nbData = n * sizeof(T); // cannot overflow due to preceding check in allocate()
+        detail::large_page_free(ptr, nbData);
+    }
+};
+
+template <typename T, typename U>
+gsl_NODISCARD bool
+operator ==(large_page_allocator<T>, large_page_allocator<U>) noexcept
+{
+    return true;
+}
+template <typename T, typename U>
+gsl_NODISCARD bool
+operator !=(large_page_allocator<T> x, large_page_allocator<U> y) noexcept
+{
+    return !(x == y);
+}
+
+
+    //
     // Allocator adaptor that aligns memory allocations for the given alignment.
     //ᅟ
     // Supports special alignment values such as `cache_line_alignment`.

@@ -1,14 +1,22 @@
 
-#include <new>
-#include <cstddef>   // for size_t, align_val_t
-#include <algorithm> // for max()
+#include <new>          // for operator new, bad_alloc
+#include <cerrno>
+#include <cstddef>      // for size_t, align_val_t
+#include <algorithm>    // for max()
+#include <system_error>
+
+#ifdef _WIN32
+# include <Windows.h>
+#else
+// assume POSIX
+# include <sys/mman.h> // for mmap(), madvise()
+#endif
 
 #include <sysmakeshift/new.hpp>    // for hardware_large_page_size(), hardware_page_size(), hardware_cache_line_size()
 #include <sysmakeshift/memory.hpp>
 
-//#ifdef __linux__
-//# include <sys/mman.h> // for madvise()
-//#endif // __linux__
+#include <sysmakeshift/detail/arithmetic.hpp> // for try_ceili()
+#include <sysmakeshift/detail/errors.hpp>
 
 namespace sysmakeshift {
 
@@ -26,13 +34,88 @@ aligned_free(void* data, std::size_t size, std::size_t alignment) noexcept
     return ::operator delete(data, size, std::align_val_t(alignment));
 }
 
-//#ifdef __linux__
-//void advise_large_pages(void* addr, std::size_t size)
-//{
-//    if (hardware_large_page_size() == 0) return; // large pages not supported
-//    madvise(addr, size, MADV_HUGEPAGE);
-//}
-//#endif // __linux__
+void*
+large_page_alloc(std::size_t size)
+{
+#if defined(__linux__)
+    if (hardware_large_page_size() == 0)
+    {
+        throw std::system_error(std::make_error_code(std::errc::not_supported));
+    }
+    void* data = ::mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, 0);
+    detail::posix_assert(data != nullptr);
+    int ec = ::madvise(data, size, MADV_HUGEPAGE);
+    if (ec != 0)
+    {
+        ec = errno;
+        ::munmap(data, size);
+        detail::posix_raise(ec);
+    }
+    return data;
+#elif defined(_WIN32)
+    // TODO: should we do anything about the privileges here? (cf. https://docs.microsoft.com/en-us/windows/win32/memory/large-page-support, https://stackoverflow.com/a/42380052)
+    std::size_t largePageSize = ::GetLargePageMinimum();
+    if (largePageSize == 0)
+    {
+        throw std::system_error(std::make_error_code(std::errc::not_supported));
+    }
+    auto fullSizeR = detail::try_ceili(size, largePageSize);
+    if (fullSizeR.ec != std::errc{ })
+    {
+        throw std::bad_alloc{ };
+    }
+    void* data = ::VirtualAlloc(NULL, fullSizeR.value, MEM_RESERVE | MEM_COMMIT | MEM_LARGE_PAGES, PAGE_READWRITE);
+    detail::win32_assert(data != nullptr);
+    return data;
+#else
+    throw std::system_error(std::make_error_code(std::errc::not_supported));
+#endif
+}
+void
+large_page_free(void* data, std::size_t size) noexcept
+{
+#if defined(__linux__)
+    detail::posix_assert(::munmap(data, size) == 0);
+#elif defined(_WIN32)
+    (void) size;
+    detail::win32_assert(::VirtualFree(data, 0, MEM_RELEASE));
+#else
+    throw std::system_error(std::make_error_code(std::errc::not_supported));
+#endif
+}
+
+void*
+page_alloc(std::size_t size)
+{
+#if defined(_WIN32)
+    void* data = ::VirtualAlloc(NULL, size, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+    detail::win32_assert(data != nullptr);
+    return data;
+#else // assume POSIX
+    void* data = ::mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, 0);
+    detail::posix_assert(data != nullptr);
+# if defined(__linux__)
+    int ec = ::madvise(data, size, MADV_NOHUGEPAGE);
+    if (ec != 0)
+    {
+        ec = errno;
+        ::munmap(data, size);
+        detail::posix_raise(ec);
+    }
+# endif // defined(__linux__)
+    return data;
+#endif
+}
+void
+page_free(void* data, std::size_t size) noexcept
+{
+#if defined(_WIN32)
+    (void) size;
+    detail::win32_assert(::VirtualFree(data, 0, MEM_RELEASE));
+#else // assume POSIX
+    detail::posix_assert(::munmap(data, size) == 0);
+#endif
+}
 
 static std::size_t
 floor_2p(std::size_t x)
