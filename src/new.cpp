@@ -53,7 +53,7 @@ hardware_large_page_size(void) noexcept
         {
             long hugePageSize = 0;
             char unit[16+1];
-            int nFields = std::sscanf(line, "Hugepagesize : %ld %16s", &hugePageSize, unit);
+            int nFields = std::sscanf(line.c_str(), "Hugepagesize : %ld %16s", &hugePageSize, unit);
             if (nFields == 2)
             {
                     // This is the only unit the kernel currently emits, so I don't bother with speculative M[i]B etc.
@@ -65,6 +65,7 @@ hardware_large_page_size(void) noexcept
                 else throw std::runtime_error("error parsing /proc/meminfo: unrecognized unit '" + std::string(unit) + "'");
             }
         }
+        return std::size_t(0); // no "Hugepagesize" entry found
 #elif defined(__APPLE__)
         return 0; // MacOS does support huge pages ("superpages") but we currently didn't write any code to support them
 #else

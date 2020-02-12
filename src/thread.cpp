@@ -47,7 +47,7 @@ struct physical_core_id
     friend bool operator <(physical_core_id const& lhs, physical_core_id const& rhs)
     {
         return lhs.core_id < rhs.core_id
-            || lhs.core_id == rhs.core_id && lhs.physical_id < rhs.physical_id;
+            || (lhs.core_id == rhs.core_id && lhs.physical_id < rhs.physical_id);
     }
 };
 
@@ -95,7 +95,7 @@ physical_concurrency(void) noexcept
             nFields = std::sscanf(line.c_str(), "physical id : %d", &id);
             if (nFields == 1)
             {
-                if (lastPhysicalId != -1) throw std::logic_error("inconsistent format in /proc/cpuinfo: missing \"core id\" value");
+                if (lastPhysicalId != -1) throw std::logic_error("error parsing /proc/cpuinfo: missing \"core id\" value");
                 lastPhysicalId = id;
             }
             else
@@ -103,7 +103,7 @@ physical_concurrency(void) noexcept
                 nFields = std::sscanf(line.c_str(), "core id : %d", &id);
                 if (nFields == 1)
                 {
-                    if (lastCoreId != -1) throw std::logic_error("inconsistent format in /proc/cpuinfo: missing \"physical id\" value");
+                    if (lastCoreId != -1) throw std::logic_error("error parsing /proc/cpuinfo: missing \"physical id\" value");
                     lastCoreId = id;
                 }
             }
