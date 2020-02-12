@@ -10,6 +10,17 @@ namespace sysmakeshift {
 
 
     //
+    // Reports the number of concurrent physical cores available.
+    //ᅟ
+    // Unlike `std::thread::hardware_concurrency()`, this only returns the number of cores, not the number of hardware threads.
+    // On systems with simultaneous multithreading ("hyper-threading") enabled, `std::thread::hardware_concurrency()` typically
+    // returns some multiple of `physical_concurrency()`.
+    //
+unsigned
+physical_concurrency(void) noexcept;
+
+
+    //
     // Like `std::thread`, but automatically joins the thread upon destruction.
     //ᅟ
     // Superseded by `std::jthread` in C++20, which also supports interruption with `std::stop_token`.

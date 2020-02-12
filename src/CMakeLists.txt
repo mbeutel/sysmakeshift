@@ -13,10 +13,12 @@ find_package(gsl-lite 0.36 REQUIRED)
 
 # library target
 add_library(sysmakeshift STATIC
+    "cpuinfo.cpp"
     "errors.cpp"
     "fenv.cpp"
     "memory.cpp"
     "new.cpp"
+    "thread.cpp"
     "thread_squad.cpp")
 
 # library properties

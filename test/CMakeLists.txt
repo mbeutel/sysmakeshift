@@ -28,6 +28,7 @@ add_executable(test-sysmakeshift
     "test-fenv.cpp"
     "test-memory.cpp"
     "test-new.cpp"
+    "test-thread.cpp"
     "test-thread_squad.cpp")
 
 # compiler settings
