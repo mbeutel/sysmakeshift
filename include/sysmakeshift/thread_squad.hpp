@@ -107,8 +107,11 @@ private:
         return p;
     }
 
-    static detail::thread_squad_handle create(thread_squad::params p);
-    std::future<void> do_run(std::function<void(task_context)> task, int concurrency, bool join);
+    static detail::thread_squad_handle
+    create(thread_squad::params p);
+    
+    std::future<void>
+    do_run(std::function<void(task_context)> task, int concurrency, bool join);
 
 public:
     explicit thread_squad(params const& p)
@@ -117,15 +120,21 @@ public:
     }
 
     thread_squad(thread_squad&&) noexcept = default;
-    thread_squad& operator =(thread_squad&&) noexcept = default;
+    thread_squad&
+    operator =(thread_squad&&) noexcept = default;
 
     thread_squad(thread_squad const&) = delete;
-    thread_squad& operator =(thread_squad const&) = delete;
+    thread_squad&
+    operator =(thread_squad const&) = delete;
 
         //
         // The number of concurrent threads.
         //
-    gsl_NODISCARD int num_threads(void) const { return handle_->numThreads_; }
+    gsl_NODISCARD int
+    num_threads(void) const
+    {
+        return handle_->numThreads_;
+    }
 
         //
         // Runs the given action on as many threads as indicated by `concurrency`, and waits until all tasks have run to completion.
