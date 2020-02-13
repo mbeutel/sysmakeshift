@@ -87,7 +87,8 @@ private:
                     auto alloc = byte_allocator_(get_allocator());
                     std::allocator_traits<byte_allocator_>::deallocate(alloc, data_, size_ * bytesPerElement_);
                 });
-            detail::construct_aligned_buffer<T>(data_, get_allocator(), numElementsConstructed, _size, bytesPerElement_, std::is_nothrow_constructible<T, Ts...>{ }, std::forward<Ts>(args)...);
+            detail::construct_aligned_buffer<T>(data_, get_allocator(), numElementsConstructed, _size, bytesPerElement_,
+                std::is_nothrow_constructible<T, Ts...>{ }, std::forward<Ts>(args)...);
             transaction.commit();
         }
     }
@@ -317,7 +318,8 @@ private:
                     auto alloc = byte_allocator_(get_allocator());
                     std::allocator_traits<byte_allocator_>::deallocate(alloc, data_, rows_ * bytesPerRow_);
                 });
-            detail::construct_aligned_row_buffer<T>(data_, get_allocator(), numElementsConstructed, _rows, _cols, bytesPerRow_, std::is_nothrow_constructible<T, Ts...>{ }, std::forward<Ts>(args)...);
+            detail::construct_aligned_row_buffer<T>(data_, get_allocator(), numElementsConstructed, _rows, _cols, bytesPerRow_,
+                std::is_nothrow_constructible<T, Ts...>{ }, std::forward<Ts>(args)...);
             transaction.commit();
         }
     }

@@ -67,7 +67,8 @@ noexcept
 
 template <typename T, typename A, typename... Ts>
 void
-construct_aligned_row_buffer(char* data, A alloc, std::size_t& numElementsConstructed, std::size_t rows, std::size_t cols, std::size_t bytesPerRow,
+construct_aligned_row_buffer(char* data, A alloc, std::size_t& numElementsConstructed,
+    std::size_t rows, std::size_t cols, std::size_t bytesPerRow,
     std::true_type /*isNothrowConstructible*/,
     Ts&&... args)
 noexcept
@@ -83,7 +84,8 @@ noexcept
 }
 template <typename T, typename A, typename... Ts>
 void
-construct_aligned_row_buffer(char* data, A alloc, std::size_t& numElementsConstructed, std::size_t rows, std::size_t cols, std::size_t bytesPerRow,
+construct_aligned_row_buffer(char* data, A alloc, std::size_t& numElementsConstructed,
+    std::size_t rows, std::size_t cols, std::size_t bytesPerRow,
     std::false_type /*isNothrowConstructible*/,
     Ts&&... args)
 {
@@ -100,7 +102,8 @@ construct_aligned_row_buffer(char* data, A alloc, std::size_t& numElementsConstr
 
 template <typename T, typename A>
 void
-destroy_aligned_row_buffer(char* data, A alloc, std::size_t rows, std::size_t cols, std::size_t bytesPerRow)
+destroy_aligned_row_buffer(char* data, A alloc,
+    std::size_t rows, std::size_t cols, std::size_t bytesPerRow)
 noexcept
 {
     for (std::ptrdiff_t i = 0, d = std::ptrdiff_t(bytesPerRow), e = std::ptrdiff_t(rows * bytesPerRow), ncols = std::ptrdiff_t(cols); i != e; i += d)
@@ -113,7 +116,8 @@ noexcept
 }
 template <typename T, typename A>
 void
-destroy_aligned_row_buffer(char* data, A alloc, std::size_t rows, std::size_t cols, std::size_t bytesPerRow, std::size_t numElementsConstructed)
+destroy_aligned_row_buffer(char* data, A alloc,
+    std::size_t rows, std::size_t cols, std::size_t bytesPerRow, std::size_t numElementsConstructed)
 noexcept
 {
     for (std::ptrdiff_t i = 0, d = std::ptrdiff_t(bytesPerRow), e = std::ptrdiff_t(rows * bytesPerRow), ncols = std::ptrdiff_t(cols); i != e; i += d)

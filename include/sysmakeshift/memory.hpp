@@ -106,23 +106,24 @@ operator !=(zero_init_allocator<T> const& x, zero_init_allocator<U> const& y) no
     //
     // Special alignment value representing the alignment of large pages.
     //
-constexpr std::size_t large_page_alignment =  std::numeric_limits<std::size_t>::max() & ~(std::numeric_limits<std::size_t>::max() >> 1);
+constexpr std::size_t large_page_alignment =  std::size_t(-1) & ~(std::size_t(-1) >> 1);
 
     //
     // Special alignment value representing the alignment of pages.
     //
-constexpr std::size_t page_alignment       = (std::numeric_limits<std::size_t>::max() & ~(std::numeric_limits<std::size_t>::max() >> 1)) >> 1;
+constexpr std::size_t page_alignment       = (std::size_t(-1) & ~(std::size_t(-1) >> 1)) >> 1;
 
     //
     // Special alignment value representing the alignment of cache lines.
     //
-constexpr std::size_t cache_line_alignment = (std::numeric_limits<std::size_t>::max() & ~(std::numeric_limits<std::size_t>::max() >> 1)) >> 2;
+constexpr std::size_t cache_line_alignment = (std::size_t(-1) & ~(std::size_t(-1) >> 1)) >> 2;
 
 
     //
     // Computes whether the provided alignment satisfies the requested alignment.
     //ᅟ
-    // The alignments corresponding to the special alignment values `large_page_alignment`, `page_alignment`, and `cache_line_alignment` are not known until runtime,
+    // The alignments corresponding to the special alignment values `large_page_alignment`, `page_alignment`, and
+    // `cache_line_alignment` are not known until runtime,
     // hence to satisfy a requested special alignment it must be provided explicitly by the provided alignment.
     //
 constexpr bool

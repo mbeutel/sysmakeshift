@@ -34,10 +34,12 @@ template <typename T, std::ptrdiff_t N> struct extent_only<T[N]> : std::integral
 template <typename T> constexpr std::ptrdiff_t extent_only_v = extent_only<T>::value;
 
 template <typename A, typename = void> struct has_member_provides_static_alignment : std::false_type { };
-template <typename A> struct has_member_provides_static_alignment<A, gsl::void_t<decltype(A::provides_static_alignment(std::declval<std::size_t>()))>> : std::is_convertible<decltype(A::provides_static_alignment(std::declval<std::size_t>())), bool> { };
+template <typename A> struct has_member_provides_static_alignment<A, gsl::void_t<decltype(A::provides_static_alignment(std::declval<std::size_t>()))>>
+    : std::is_convertible<decltype(A::provides_static_alignment(std::declval<std::size_t>())), bool> { };
 
 
-constexpr std::size_t special_alignments = std::numeric_limits<std::size_t>::max() & ~(std::numeric_limits<std::size_t>::max() >> 3); // = large_page_alignment | page_alignment | cache_line_alignment
+    // = large_page_alignment | page_alignment | cache_line_alignment
+constexpr std::size_t special_alignments = std::size_t(-1) & ~(std::size_t(-1) >> 3);
 
 constexpr bool
 provides_static_alignment(std::size_t alignmentProvided, std::size_t alignmentRequested) noexcept

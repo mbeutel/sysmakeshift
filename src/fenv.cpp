@@ -23,7 +23,11 @@ namespace sysmakeshift {
 
 #if defined(_WIN32)
     // We assume that the flags for C++11 floating-point settings and for `_controlfp_s()` have identical values.
-static_assert(FE_DIVBYZERO == _EM_ZERODIVIDE && FE_INEXACT == _EM_INEXACT && FE_INVALID == _EM_INVALID && FE_OVERFLOW == _EM_OVERFLOW && FE_UNDERFLOW == _EM_UNDERFLOW);
+static_assert(FE_DIVBYZERO == _EM_ZERODIVIDE
+           && FE_INEXACT == _EM_INEXACT
+           && FE_INVALID == _EM_INVALID
+           && FE_OVERFLOW == _EM_OVERFLOW
+           && FE_UNDERFLOW == _EM_UNDERFLOW);
 #endif // defined(_WIN32)
 
 #ifdef APPLE_INTEL
@@ -36,7 +40,7 @@ fegetexcept(void)
     {
         return -1;
     }
-    return ~fenv.__control & FE_ALL_EXCEPT;
+    return ~fenv.__control & FE_ALL_EXCEPT; // Note that the original source code in fe-handling-example.c has a bug here.
 }
 static int
 feenableexcept(int excepts)
