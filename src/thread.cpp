@@ -3,10 +3,10 @@
 #include <vector>
 #include <fstream>
 #include <iostream>
-#include <stdexcept> // for logic_error()
+#include <stdexcept> // for runtime_error
 #include <algorithm> // for sort(), is_sorted(), adjacent_find()
 
-#include <gsl-lite/gsl-lite.hpp> // for dim, ssize(), gsl_Expects(), narrow_cast<>()
+#include <gsl-lite/gsl-lite.hpp> // for dim, ssize(), gsl_ExpectsAudit(), narrow<>()
 
 #include <sysmakeshift/thread.hpp>
 
@@ -83,7 +83,7 @@ physical_concurrency(void) noexcept
 # if defined(__linux__)
             // I can't believe that parsing /proc/cpuinfo is the accepted way to query the number of physical cores.
         auto f = std::ifstream("/proc/cpuinfo");
-        if (!f) throw std::logic_error("cannot open /proc/cpuinfo"); // something is really wrong if we cannot open that file
+        if (!f) throw std::runtime_error("cannot open /proc/cpuinfo"); // something is really wrong if we cannot open that file
         auto ids = std::vector<detail::physical_core_id>{ };
         auto line = std::string{ };
         int lastCoreId = -1;
@@ -95,7 +95,7 @@ physical_concurrency(void) noexcept
             nFields = std::sscanf(line.c_str(), "physical id : %d", &id);
             if (nFields == 1)
             {
-                if (lastPhysicalId != -1) throw std::logic_error("error parsing /proc/cpuinfo: missing \"core id\" value");
+                if (lastPhysicalId != -1) throw std::runtime_error("error parsing /proc/cpuinfo: missing \"core id\" value");
                 lastPhysicalId = id;
             }
             else
@@ -103,7 +103,7 @@ physical_concurrency(void) noexcept
                 nFields = std::sscanf(line.c_str(), "core id : %d", &id);
                 if (nFields == 1)
                 {
-                    if (lastCoreId != -1) throw std::logic_error("error parsing /proc/cpuinfo: missing \"physical id\" value");
+                    if (lastCoreId != -1) throw std::runtime_error("error parsing /proc/cpuinfo: missing \"physical id\" value");
                     lastCoreId = id;
                 }
             }
@@ -123,7 +123,7 @@ physical_concurrency(void) noexcept
         int result = 0;
         int nbResult = sizeof result;
         int ec = sysctlbyname("hw.physicalcpu", &result, &nbResult, 0, 0);
-        if (ec != 0) throw std::logic_error("cannot query hw.physicalcpu");
+        if (ec != 0) throw std::runtime_error("cannot query hw.physicalcpu");
         return gsl::narrow<unsigned>(result);
 # else
 #  error Unsupported operating system.

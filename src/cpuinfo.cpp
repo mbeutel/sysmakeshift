@@ -1,7 +1,7 @@
 
 #include <cstddef>   // for ptrdiff_t
 #include <memory>    // for unique_ptr<>
-#include <stdexcept> // for logic_error()
+#include <stdexcept> // for runtime_error
 
 #if defined(_WIN32)
 # ifndef NOMINMAX
@@ -46,21 +46,19 @@ get_win32_cpu_info(void) noexcept
             }
             if (pSlpi[i].Relationship == RelationCache && pSlpi[i].Cache.Level == 1 && (pSlpi[i].Cache.Type == CacheData || pSlpi[i].Cache.Type == CacheUnified))
             {
-                // We don't bother further checking the CPU affinity group here because we don't expect to encounter a system with heterogeneous cache line sizes.
-
                 if (lresult.cache_line_size == 0)
                 {
                     lresult.cache_line_size = pSlpi[i].Cache.LineSize;
                 }
                 else if (lresult.cache_line_size != pSlpi[i].Cache.LineSize)
                 {
-                    throw std::logic_error("GetLogicalProcessorInformation() reports different L1 cache line sizes for different cores"); // ...and we cannot handle that
+                    throw std::runtime_error("GetLogicalProcessorInformation() reports different L1 cache line sizes for different cores"); // ...and we cannot handle that
                 }
             }
         }
         if (lresult.cache_line_size == 0)
         {
-            throw std::logic_error("GetLogicalProcessorInformation() did not report any L1 cache info");
+            throw std::runtime_error("GetLogicalProcessorInformation() did not report any L1 cache info");
         }
         return lresult;
     }();

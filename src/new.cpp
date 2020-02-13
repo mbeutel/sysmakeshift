@@ -1,13 +1,14 @@
 ﻿
+#include <cstdio>
 #include <cstdlib>   // for sscanf()
 #include <cstddef>   // for size_t
 #include <cstring>   // for strcmp()
 #include <string>
 #include <fstream>
 #include <iostream>
-#include <stdexcept> // for logic_error
+#include <stdexcept> // for runtime_error
 
-#include <gsl-lite/gsl-lite.hpp> // for gsl_Expects(), narrow_cast<>()
+#include <gsl-lite/gsl-lite.hpp> // for narrow<>()
 
 #include <sysmakeshift/new.hpp>
 #include <sysmakeshift/memory.hpp>
@@ -47,7 +48,7 @@ hardware_large_page_size(void) noexcept
             // I can't believe that parsing /proc/meminfo is the accepted way to query the default hugepage size and other
             // parameters.
         auto f = std::ifstream("/proc/meminfo");
-        if (!f) throw std::logic_error("cannot open /proc/meminfo"); // something is really wrong if we cannot open that file
+        if (!f) throw std::runtime_error("cannot open /proc/meminfo"); // something is really wrong if we cannot open that file
         auto line = std::string{ };
         while (std::getline(f, line))
         {
@@ -107,19 +108,19 @@ hardware_cache_line_size(void) noexcept
         long result = 0;
 #  ifdef _SC_LEVEL1_DCACHE_LINESIZE
         result = sysconf(_SC_LEVEL1_DCACHE_LINESIZE);
-        if (result > 0) return gsl::narrow_cast<std::size_t>(result);
+        if (result > 0) return gsl::narrow<std::size_t>(result);
 #  endif // _SC_LEVEL1_DCACHE_LINESIZE
         FILE* f = std::fopen("/sys/devices/system/cpu/cpu0/cache/index0/coherency_line_size", "r");
-        gsl_Expects(f != nullptr);
+        if (f == nullptr) throw std::runtime_error("cannot open /sys/devices/system/cpu/cpu0/cache/index0/coherency_line_size");
         int nf = std::fscanf(f, "%ld", &result);
         std::fclose(f);
-        gsl_Expects(nf == 1 && result != 0);
-        return gsl::narrow_cast<std::size_t>(result);
+        if (nf != 1 || result == 0) throw std::runtime_error("error parsing /sys/devices/system/cpu/cpu0/cache/index0/coherency_line_size");
+        return gsl::narrow<std::size_t>(result);
 # elif defined(__APPLE__)
         std::size_t result = 0;
         std::size_t nbResult = sizeof result;
         int ec = sysctlbyname("hw.cachelinesize", &result, &nbResult, 0, 0);
-        gsl_Expects(ec == 0);
+        if (ec != 0) throw std::runtime_error("cannot query hw.cachelinesize");
         return result;
 # else
 #  error Unsupported operating system.
