@@ -1,16 +1,15 @@
 
 #include <string>
-#include <cstddef>      // for size_t, ptrdiff_t
-#include <cstring>      // for wcslen(), swprintf()
-#include <utility>      // for move()
-#include <memory>       // for unique_ptr<>
-#include <algorithm>    // for max()
-#include <exception>    // for terminate()
-#include <stdexcept>    // for range_error
-#include <type_traits>  // for remove_pointer<>
+#include <cstddef>            // for size_t, ptrdiff_t
+#include <cstring>            // for wcslen(), swprintf()
+#include <utility>            // for move()
+#include <memory>             // for unique_ptr<>
+#include <algorithm>          // for max()
+#include <exception>          // for terminate()
+#include <stdexcept>          // for range_error
+#include <type_traits>        // for remove_pointer<>
 #include <system_error>
-#include <optional>
-#include <future>
+#include <atomic>
 #include <mutex>
 #include <condition_variable>
 
@@ -281,82 +280,61 @@ static std::atomic<unsigned> threadSquadCounter{ };
 #endif // _WIN32
 
 
-    // TODO: this barrier can be made more efficient:
-    //  - by using a better algorithm, e.g. a dissemination barrier
-    //  - by using mostly syscall-free waits (e.g. atomics and exponential backoff), especially if all threads run on a
-    //    dedicated hardware thread
-    //  - by issuing PAUSE instructions, especially if multiple threads share a physical thread
-class barrier
+enum class thread_status : int
 {
-private:
-    std::size_t value_;
-    std::size_t baseValue_;
-    std::size_t numThreads_;
-    std::condition_variable cv_;
-    std::mutex m_;
-
-public:
-    barrier(std::ptrdiff_t _numThreads)
-        : value_(0), baseValue_(0), numThreads_(gsl::narrow<std::size_t>(_numThreads))
-    {
-            // We permit constructing a barrier with 0 threads, but calling `arrive_and_wait()` on it is illegal.
-        gsl_Expects(_numThreads >= 0);
-
-            // This is necessary to permit overlapping rounds.
-        gsl_Expects(numThreads_ < std::numeric_limits<std::size_t>::max() / 2);
-    }
-
-    bool
-    arrive_and_wait(void)
-    {
-        gsl_Expects(numThreads_ != 0);
-
-        if (numThreads_ == 1) return true;
-
-        auto lbaseValue = baseValue_;
-        auto lock = std::unique_lock(m_);
-        std::size_t pos = ++value_;
-        if (pos == lbaseValue + numThreads_) // may overflow
-        {
-                // We are the last thread to arrive at the barrier. Update the base value and signal the condition variable.
-            baseValue_ = pos;
-            lock.unlock();
-            cv_.notify_all();
-            return true;
-        }
-        else
-        {
-                // We need to wait for other threads to arrive.
-            while (value_ - lbaseValue < numThreads_)
-            {
-                cv_.wait(lock);
-            }
-            return false;
-        }
-    }
-};
-
-
-struct thread_squad_job
-{
-    std::function<void(thread_squad::task_context)> action;
-    mutable std::optional<std::promise<void>> completion; // mutable because otherwise we cannot fulfill the promise
-    int concurrency = 0;
-    bool last = false;
-    std::shared_future<std::optional<thread_squad_job>> nextJob;
+    idle,
+    work_requested,
+    termination_requested
 };
 
 struct thread_squad_thread
 {
-    thread_squad_impl& impl_;
-    std::shared_future<std::optional<thread_squad_job>> nextJob_;
-    int threadIdx_;
+        // synchronization data
+    std::mutex mutex;
+    std::condition_variable cv;
+    std::atomic<thread_status> status;
+    thread_squad_impl& impl;
+    int threadIdx;
+    int siblingStride;
+    int siblingCount;
 
-    thread_squad_thread(thread_squad_impl& _impl, std::shared_future<std::optional<thread_squad_job>> const& _nextJob) noexcept
-        : impl_(_impl),
-          nextJob_(_nextJob),
-          threadIdx_(0) // to be set afterwards
+        // task-specific data
+    int concurrency;
+    std::function<void(thread_squad::task_context)> action;
+
+    thread_squad_thread(thread_squad_impl& _impl) noexcept
+        : impl(_impl),
+          status(thread_status::idle)
     {
+    }
+
+    void
+    initialize(int _threadIdx, int _stride)
+    {
+        threadIdx = _threadIdx;
+        if (_threadIdx != 0)
+        {
+            level = _depth;
+            do
+            {
+                --level;
+                _threadIdx >>= 1;
+            } while (_threadIdx != 0);
+        }
+        else
+        {
+            level = 0;
+        }
+    }
+
+    void
+    wake(thread_status _newStatus, int _concurrency)
+    {
+        gsl_Expects(_newStatus != thread_status::idle);
+
+        status.store(_newStatus, std::memory_order_relaxed);
+        concurrency = _concurrency;
+
     }
 
     void
@@ -384,8 +362,6 @@ private:
 # error Unsupported operating system.
 #endif // _WIN32
 
-    barrier barrier_;
-    std::promise<std::optional<thread_squad_job>> nextJob_;
     aligned_buffer<thread_squad_thread, cache_line_alignment> data_;
 #ifdef _WIN32
     unsigned threadSquadId_; // for runtime thread identification during debugging
@@ -713,7 +689,7 @@ thread_squad::create(thread_squad::params p)
     return detail::thread_squad_handle(new detail::thread_squad_impl(p));
 }
 
-std::future<void>
+void
 thread_squad::do_run(std::function<void(task_context)> action, int concurrency, bool join)
 {
     std::future<void> completion;
