@@ -12,12 +12,16 @@ project(sysmakeshift
 
 # Define build options.
 option(SYSMAKESHIFT_BUILD_TESTS "Build tests" OFF)
+option(SYSMAKESHIFT_BUILD_BENCHMARKS "Build benchmarks" OFF)
 
 # Include target definitions.
 add_subdirectory(src)
 if(SYSMAKESHIFT_BUILD_TESTS)
     enable_testing()
     add_subdirectory(test)
+endif()
+if(SYSMAKESHIFT_BUILD_BENCHMARKS)
+    add_subdirectory(test/benchmark)
 endif()
 
 # Install.
