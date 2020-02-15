@@ -20,6 +20,7 @@ TEST_CASE("thread_squad can schedule single task")
     GENERATE(range(0, 20)); // repetitions
 
     int numThreads = GENERATE(0, 1, 3, 10, 50);
+
     unsigned numActualThreads = static_cast<unsigned>(numThreads);
     if (numActualThreads == 0)
     {
@@ -59,7 +60,7 @@ TEST_CASE("thread_squad can schedule multiple tasks")
 {
     GENERATE(range(0, 10)); // repetitions
 
-    int numThreads = GENERATE(0, 1, 3, 10, 50);
+    int numThreads = GENERATE(range(0, 10), 10, 48, 50);
     unsigned numActualThreads = static_cast<unsigned>(numThreads);
     if (numActualThreads == 0)
     {

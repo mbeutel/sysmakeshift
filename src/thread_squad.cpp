@@ -285,13 +285,6 @@ static std::atomic<unsigned> threadSquadCounter{ };
 #endif // _WIN32
 
 
-enum class thread_status : int
-{
-    idle,
-    work_requested,
-    termination_requested
-};
-
 template <typename T>
 void atomic_wait_equal(std::atomic<T>& a, T expected)
 {
@@ -304,13 +297,13 @@ void atomic_wait_equal(std::atomic<T>& a, T expected)
 
 struct thread_sync_data
 {
-    std::atomic<thread_status> status;
+    std::atomic<int> sense;
     thread_squad_impl& impl;
     int threadIdx;
     int numSubthreads;
 
     thread_sync_data(thread_squad_impl& _impl) noexcept
-        : status(thread_status::idle),
+        : sense(0),
           impl(_impl),
           numSubthreads(0)
     {
@@ -389,16 +382,17 @@ init(
 static void
 wait_for_thread(
     aligned_buffer<thread_sync_data, cache_line_alignment>& threadSyncData,
+    int sense,
     int first, int last, int stride)
 {
     int substride = next_substride(stride);
     if (stride != 1)
     {
-        wait_for_thread(threadSyncData, first, std::min(first + substride, last), substride);
+        wait_for_thread(threadSyncData, sense, first, std::min(first + substride, last), substride);
     }
     for (int i = first + substride; i < last; i += substride)
     {
-        atomic_wait_equal(threadSyncData[i].status, thread_status::idle);
+        atomic_wait_equal(threadSyncData[i].sense, sense);
 #ifdef DEBUG_WAIT_CHAIN
         std::printf("waited: %d <- %d\n", first, i);
         std::fflush(stdout);
@@ -409,10 +403,11 @@ wait_for_thread(
 static void
 wait_for_thread(
     aligned_buffer<thread_sync_data, cache_line_alignment>& threadSyncData,
+    int sense,
     int threadIdx, int concurrency)
 {
     int stride = threadSyncData[threadIdx].numSubthreads;
-    wait_for_thread(threadSyncData, threadIdx, std::min(threadIdx + stride, concurrency), stride);
+    wait_for_thread(threadSyncData, sense, threadIdx, std::min(threadIdx + stride, concurrency), stride);
 }
 
 
@@ -453,8 +448,10 @@ struct thread_squad_impl : thread_squad_impl_base
     aligned_buffer<thread_sync_data, cache_line_alignment> threadSyncData;
 
         // task-specific data
-    int concurrency;
     std::function<void(thread_squad::task_context)> action;
+    std::atomic<int> sense;
+    int concurrency;
+    bool terminationRequested;
 
 #ifdef _WIN32
     unsigned threadSquadId; // for runtime thread identification during debugging
@@ -472,6 +469,7 @@ struct thread_squad_impl : thread_squad_impl_base
 #ifdef _WIN32
           threadSquadId(threadSquadCounter++),
 #endif // _WIN32
+          sense{ },
           needLaunch(true)
     {
         init(threadSyncData);
@@ -592,14 +590,15 @@ noexcept // We cannot really handle exceptions here.
 {
     gsl_Expects(action || join);
 
-    auto requestedStatus = join ? thread_status::termination_requested : thread_status::work_requested;
-    int numThreadsToWake = join ? self.numThreads : concurrency;
+    self.terminationRequested = join;
     self.concurrency = concurrency;
     self.action = std::move(action);
-    for (int i = 0; i != numThreadsToWake; ++i)
+    int oldSense;
     {
-        self.threadSyncData[i].status.store(requestedStatus, std::memory_order_relaxed);
+        auto lock = std::unique_lock(self.mutex);
+        oldSense = self.sense.fetch_xor(1, std::memory_order_relaxed);
     }
+    int newSense = 1 - oldSense;
 
 #ifdef USE_PTHREAD
     bool wakeToJoin = join && !self.needLaunch;
@@ -628,7 +627,7 @@ noexcept // We cannot really handle exceptions here.
     }
     else
     {
-        detail::atomic_wait_equal(self.threadSyncData[0].status, thread_status::idle);
+        detail::atomic_wait_equal(self.threadSyncData[0].sense, newSense);
 #ifdef DEBUG_WAIT_CHAIN
         std::printf("waited: general <- 0\n");
         std::fflush(stdout);
@@ -647,34 +646,36 @@ run_task_on_thread(std::function<void(thread_squad::task_context)> action, threa
 static void
 run_thread(thread_sync_data& data)
 {
-    thread_status requestedStatus;
     do
     {
         std::atomic_thread_fence(std::memory_order_acquire);
-        while (data.status.load(std::memory_order_relaxed) == thread_status::idle)
+        while (data.sense.load(std::memory_order_relaxed) == data.impl.sense)
         {
             // TODO: this can probably be tuned
             auto lock = std::unique_lock(data.impl.mutex);
-            data.impl.cv.wait(lock);
+            while (data.sense.load(std::memory_order_relaxed) == data.impl.sense)
+            {
+                data.impl.cv.wait(lock);
+            }
         }
-        requestedStatus = data.status.load(std::memory_order_acquire);
+        auto newSense = data.impl.sense.load(std::memory_order_relaxed);
 
         if (data.impl.action && data.threadIdx < data.impl.concurrency)
         {
             detail::run_task_on_thread(data.impl.action, data.impl.make_context(data.threadIdx));
         }
 
-        if (requestedStatus != thread_status::termination_requested)
+        if (!data.impl.terminationRequested)
         {
-            wait_for_thread(data.impl.threadSyncData, data.threadIdx, data.impl.concurrency);
+            wait_for_thread(data.impl.threadSyncData, newSense, data.threadIdx, data.impl.concurrency);
 #ifdef DEBUG_WAIT_CHAIN
             std::printf("signaling: %d\n", data.threadIdx);
             std::fflush(stdout);
 #endif // DEBUG_WAIT_CHAIN
-            data.status.store(thread_status::idle, std::memory_order_release);
+            data.sense.store(newSense, std::memory_order_release);
         }
 
-    } while (requestedStatus != thread_status::termination_requested);
+    } while (!data.impl.terminationRequested);
 }
 
 #if defined(_WIN32)
