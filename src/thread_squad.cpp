@@ -497,7 +497,6 @@ struct thread_squad_impl : thread_squad_impl_base
 #endif
 #ifdef USE_PTHREAD
         handles = std::make_unique<detail::pthread_handle[]>(gsl::narrow<std::size_t>(p.num_threads));
-        needLaunch = false;
 #endif // USE_PTHREAD
     }
 
@@ -535,7 +534,7 @@ noexcept // We cannot really handle thread launch failure.
 # endif // defined(USE_PTHREAD_SETAFFINITY)
         auto handle = pthread_t{ };
         detail::posix_check(::pthread_create(&handle, &attr.attr, thread_squad_thread_func, &self.threadSyncData[i]));
-        handles[i] = pthread_handle(handle);
+        self.handles[i] = pthread_handle(handle);
     }
 
 # if defined(USE_PTHREAD_SETAFFINITY)
@@ -581,6 +580,8 @@ noexcept // We cannot really handle join failure.
 #else
 # error Unsupported operating system.
 #endif
+
+    self.handles.reset();
 }
 
 static void
@@ -712,7 +713,12 @@ thread_squad_impl_deleter::operator ()(thread_squad_impl_base* base)
 {
     auto impl = static_cast<thread_squad_impl*>(base);
     auto memGuard = std::unique_ptr<thread_squad_impl>(impl);
-    detail::run(*impl, { }, 0, true);
+
+        // Join threads only if they haven't already been joined.
+    if (impl->handles)
+    {
+        detail::run(*impl, { }, 0, true);
+    }
 }
 
 
