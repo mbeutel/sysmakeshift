@@ -1,4 +1,8 @@
 
+#ifdef DEBUG_WAIT_CHAIN
+# include <cstdio>
+#endif // DEBUG_WAIT_CHAIN
+
 #include <string>
 #include <cstddef>            // for size_t, ptrdiff_t
 #include <cstring>            // for wcslen(), swprintf()
@@ -304,70 +308,123 @@ struct thread_sync_data
     thread_squad_impl& impl;
     int threadIdx;
     int numSubthreads;
-    //int siblingStride;
-    //int siblingCount;
 
     thread_sync_data(thread_squad_impl& _impl) noexcept
         : status(thread_status::idle),
-          impl(_impl)
+          impl(_impl),
+          numSubthreads(0)
     {
     }
 };
 
-std::tuple<int, int> // (stride, #blocks)
-nextSubdivision(int blockSize)
+static int
+next_substride(int stride)
 {
-    if (blockSize % 2 == 0)
+    if (stride % 2 == 0)
     {
-        return { blockSize /= 2, 2 };
+        return stride /= 2;
     }
-    else if (blockSize % 3 == 0)
+    else if (stride % 3 == 0)
     {
-        return { blockSize /= 3, 3 };
+        return stride /= 3;
     }
     else
     {
-        return { (blockSize + 1) / 2, 2 };
+        return (stride + 1) / 2;
+    }
+}
+
+
+//
+//      X X X X X X X X X     X X X X X X X X     X X X X X X X     X X X X X X
+//      X X X X X X X X X     X X X X X X X X     X X X X X X X     X X X X X X
+//      X X X X X X X X X     X X X X X X X X     X X X X X X X     X X X X X X
+//
+//      w-^
+//      w---^                 w-^                              
+//                  w-^           w-^             w-^               
+//                  w---^     w---^                   w-^           w---^
+//      w-----------^                 w-^         w---^             w-^
+//            w---^                       w-^             w-^             w---^
+//            w-^                     w---^               w---^           w-^
+//      w-----^               w-------^           w-------^         w-----^
+//
+//      w-^   w-^   w-^       w-^ w-^ w-^ w-^     w-^ w-^ w-^       w-^   w-^
+//      w---^ w---^ w---^     w---^   w---^       w---^   w---^     w---^ w---^
+//      w-----^               w-------^           w-------^         w-----^
+//      w-----------^
+//
+//      9 1 1 3 1 1 3 1 1     8 1 2 1 4 1 2 1     8 1 2 1 4 1 2     6 1 1 3 1 1
+//
+
+
+static void
+init_range(
+    aligned_buffer<thread_sync_data, cache_line_alignment>& threadSyncData,
+    int first, int last, int stride)
+{
+    if (stride != 1)
+    {
+        int substride = next_substride(stride);
+        for (int i = first; i < last; i += substride)
+        {
+            init_range(threadSyncData, i, std::min(i + substride, last), substride);
+        }
+    }
+    threadSyncData[first].numSubthreads = stride;
+}
+
+static void
+init(
+    aligned_buffer<thread_sync_data, cache_line_alignment>& threadSyncData)
+{
+    int numThreads = gsl::narrow<int>(threadSyncData.size());
+    for (int i = 0; i < numThreads; ++i)
+    {
+        threadSyncData[i].threadIdx = i;
+    }
+    init_range(threadSyncData, 0, numThreads, numThreads);
+}
+
+static void
+wait_for_thread(
+    aligned_buffer<thread_sync_data, cache_line_alignment>& threadSyncData,
+    int first, int last, int stride)
+{
+    int substride = next_substride(stride);
+    if (stride != 1)
+    {
+        wait_for_thread(threadSyncData, first, std::min(first + substride, last), substride);
+    }
+    for (int i = first + substride; i < last; i += substride)
+    {
+        atomic_wait_equal(threadSyncData[i].status, thread_status::idle);
+#ifdef DEBUG_WAIT_CHAIN
+        std::printf("waited: %d <- %d\n", first, i);
+        std::fflush(stdout);
+#endif // DEBUG_WAIT_CHAIN
     }
 }
 
 static void
-initialize(aligned_buffer<thread_sync_data, cache_line_alignment>& threadSyncData)
+wait_for_thread(
+    aligned_buffer<thread_sync_data, cache_line_alignment>& threadSyncData,
+    int threadIdx, int concurrency)
 {
-    int numThreads = gsl::narrow<int>(threadSyncData.size());
-    //int numSubthreads = gsl::narrow<int>(std::thread::hardware_concurrency());
-    int numSubthreads = numThreads;
-    while (numSubthreads > 0)
-    {
-        auto [s, n] = nextSubdivision(numSubthreads);
-        for (int i = 0)
-        if (numSubthreads % 2 == 0)
-        {
-            numSubthreads /= 2;
-        }
-        else if (numSubthreads % 3 == 0)
-        {
-            numSubthreads /= 3;
-        }
-        else
-        {
-            numSubthreads 
-        }
-        numSubthreads 
-    }
+    int stride = threadSyncData[threadIdx].numSubthreads;
+    wait_for_thread(threadSyncData, threadIdx, std::min(threadIdx + stride, concurrency), stride);
 }
 
-static void wait_for_thread(thread_sync_data& threadSyncData, int concurrency)
+
+static std::size_t
+get_hardware_thread_id(int threadIdx, int maxNumHardwareThreads, gsl::span<int const> hardwareThreadMappings)
 {
-    int threadIdx = threadSyncData.threadIdx,
-        siblingStride = threadSyncData.siblingStride;
-    int last = std::min(threadIdx + siblingStride*threadSyncData.siblingCount, concurrency);
-    for (int i = threadIdx; i < last; i += siblingStride)
-    {
-        atomic_wait_equal(threadSyncData.status, thread_status::idle);
-    }
-    threadSyncData.status.store(thread_status::idle, std::memory_order_release);
+    auto subidx = threadIdx % maxNumHardwareThreads;
+    return gsl::narrow<std::size_t>(
+        !hardwareThreadMappings.empty() ? hardwareThreadMappings[subidx]
+        : subidx);
 }
+
 
 #if defined(_WIN32)
 static unsigned __stdcall
@@ -381,349 +438,267 @@ thread_squad_thread_func(void* data);
 
 struct thread_squad_impl : thread_squad_impl_base
 {
-private:
+        // thread handles
 #if defined(_WIN32)
-    std::unique_ptr<detail::win32_handle[]> handles_;
+    std::unique_ptr<detail::win32_handle[]> handles;
 #elif defined(USE_PTHREAD)
-    std::unique_ptr<detail::pthread_handle[]> handles_;
+    std::unique_ptr<detail::pthread_handle[]> handles;
 #else
 # error Unsupported operating system.
 #endif // _WIN32
 
         // synchronization data
-    std::mutex mutex_;
-    std::condition_variable cv_;
-    aligned_buffer<thread_sync_data, cache_line_alignment> threadSyncData_;
+    std::mutex mutex;
+    std::condition_variable cv;
+    aligned_buffer<thread_sync_data, cache_line_alignment> threadSyncData;
 
         // task-specific data
-    int concurrency_;
-    thread_status requestedStatus_;
-    std::function<void(thread_squad::task_context)> action_;
+    int concurrency;
+    std::function<void(thread_squad::task_context)> action;
 
 #ifdef _WIN32
-    unsigned threadSquadId_; // for runtime thread identification during debugging
+    unsigned threadSquadId; // for runtime thread identification during debugging
 #endif // _WIN32
-    bool needLaunch_;
+    bool needLaunch;
 #ifdef USE_PTHREAD_SETAFFINITY
-    bool pinToHardwareThreads_;
-    int maxNumHardwareThreads_;
-    std::vector<int> hardwareThreadMappings_;
+    bool pinToHardwareThreads;
+    int maxNumHardwareThreads;
+    std::vector<int> hardwareThreadMappings;
 #endif // USE_PTHREAD_SETAFFINITY
 
-    void
-    wait_for_thread(thread_sync_data& threadSyncData, int concurrency)
-    {
-        int threadIdx = threadSyncData.threadIdx,
-            siblingStride = threadSyncData.siblingStride;
-        int last = std::min(threadIdx + siblingStride*threadSyncData.siblingCount, concurrency);
-        for (int i = threadIdx; i < last; i += siblingStride)
-        {
-            atomic_wait_equal(threadSyncData.status, thread_status::idle);
-        }
-        threadSyncData.status.store(thread_status::idle, std::memory_order_release);
-    }
-
-    static std::size_t
-    get_hardware_thread_id(int threadIdx, int maxNumHardwareThreads, gsl::span<int const> hardwareThreadMappings)
-    {
-        auto subidx = threadIdx % maxNumHardwareThreads;
-        return gsl::narrow<std::size_t>(
-            !hardwareThreadMappings.empty() ? hardwareThreadMappings[subidx]
-          : subidx);
-    }
-
-    void
-    join_threads_and_free(void) noexcept // We cannot really handle join failure.
-    {
-        auto self = std::unique_ptr<thread_squad_impl>(this);
-        
-#if defined(_WIN32)
-            // Join threads.
-        for (int i = 0; i < numThreads_; )
-        {
-                // Join as many threads as possible in a single syscall. It is possible that this can be improved with a tree-like wait chain.
-            HANDLE lhandles[MAXIMUM_WAIT_OBJECTS];
-            int n = std::min(numThreads_ - i, MAXIMUM_WAIT_OBJECTS);
-            for (int j = 0; j < n; ++j)
-            {
-                lhandles[j] = handles_[i + j].get();
-            }
-            DWORD result = ::WaitForMultipleObjects(n, lhandles, TRUE, INFINITE);
-            detail::win32_assert(result != WAIT_FAILED);
-            i += n;
-        }
-#elif defined(USE_PTHREAD)
-            // Join threads. It is possible that this can be improved with a tree-like wait chain.
-        for (int i = 0; i < numThreads_; ++i)
-        {
-            detail::posix_check(::pthread_join(handles_[i].get(), NULL));
-            handles_[i].release();
-        }
-#else
-# error Unsupported operating system.
-#endif
-    }
-
-    void
-    run(std::function<void(thread_squad::task_context)> _action, int _concurrency, bool join)
-    {
-        gsl_Expects(_action || join);
-
-#ifdef USE_PTHREAD
-        if (needLaunch_ && !_action || _concurrency == 0)
-        {
-                // Threads have not been launched yet; simply do nothing.
-            return;
-        }
-#endif // USE_PTHREAD
-
-        concurrency_ = _concurrency;
-        requestedStatus_ = join ? thread_status::termination_requested : thread_status::work_requested;
-        action_ = std::move(_action);
-
-        if (needLaunch_)
-        {
-            launch_threads();
-        }
-        else
-        {
-            cv_.notify_all();
-        }
-
-        // TODO: wait for threads
-
-        if (join)
-        {
-            join_threads_and_free();
-        }
-    }
-
-
-    void
-    schedule_termination(std::future<void>* completion) noexcept // We cannot really handle `bad_alloc` here.
-    {
-        nextJob_.set_value(std::nullopt);
-        if (completion != nullptr)
-        {
-            *completion = std::async(std::launch::deferred, &thread_squad_impl::join_threads_and_free, this);
-        }
-    }
-
-public:
     thread_squad_impl(thread_squad::params const& p)
         : thread_squad_impl_base{ p.num_threads },
-          barrier_(p.num_threads),
-          nextJob_{ },
-          syncData_(gsl::narrow<std::size_t>(p.num_threads), std::in_place, *this, nextJob_.get_future().share()),
+          threadSyncData(gsl::narrow<std::size_t>(p.num_threads), std::in_place, *this),
 #ifdef _WIN32
-          threadSquadId_(threadSquadCounter++),
+          threadSquadId(threadSquadCounter++),
 #endif // _WIN32
-          running_(false)
+          needLaunch(true)
     {
-        for (int i = 0; i < p.num_threads; ++i)
-        {
-            syncData_[i].threadIdx_ = i;
-        }
+        init(threadSyncData);
 
 #if defined(_WIN32)
             // Create threads suspended; set core affinity if desired.
-        handles_ = std::make_unique<detail::win32_handle[]>(gsl::narrow<std::size_t>(p.num_threads));
+        handles = std::make_unique<detail::win32_handle[]>(gsl::narrow<std::size_t>(p.num_threads));
         DWORD threadCreationFlags = p.pin_to_hardware_threads ? CREATE_SUSPENDED : 0;
         for (int i = 0; i < p.num_threads; ++i)
         {
             auto handle = detail::win32_handle(
-                (HANDLE) ::_beginthreadex(NULL, 0, &thread_squad_thread::threadFunc, &syncData_[i], threadCreationFlags, nullptr));
+                (HANDLE) ::_beginthreadex(NULL, 0, thread_squad_thread_func, &threadSyncData[i], threadCreationFlags, nullptr));
             detail::win32_assert(handle != nullptr);
             if (p.pin_to_hardware_threads)
             {
                 detail::setThreadAffinity(handle.get(), get_hardware_thread_id(i, p.max_num_hardware_threads, p.hardware_thread_mappings));
             }
-            handles_[i] = std::move(handle);
+            handles[i] = std::move(handle);
         }
 #elif defined(USE_PTHREAD_SETAFFINITY)
             // Store hardware thread mappings for delayed thread creation.
-        pinToHardwareThreads_ = p.pin_to_hardware_threads;
-        maxNumHardwareThreads_ = p.max_num_hardware_threads;
-        hardwareThreadMappings_.assign(p.hardware_thread_mappings.begin(), p.hardware_thread_mappings.end());
+        pinToHardwareThreads = p.pin_to_hardware_threads;
+        maxNumHardwareThreads = p.max_num_hardware_threads;
+        hardwareThreadMappings.assign(p.hardware_thread_mappings.begin(), p.hardware_thread_mappings.end());
 #endif
 #ifdef USE_PTHREAD
-        handles_ = std::make_unique<detail::pthread_handle[]>(gsl::narrow<std::size_t>(p.num_threads));
-        needLaunch_ = false;
+        handles = std::make_unique<detail::pthread_handle[]>(gsl::narrow<std::size_t>(p.num_threads));
+        needLaunch = false;
 #endif // USE_PTHREAD
     }
 
-    bool
-    wait_at_barrier(void)
+    thread_squad::task_context make_context(int threadIdx) noexcept
     {
-        return barrier_.arrive_and_wait();
-    }
-
-
-#ifdef _WIN32
-    unsigned
-    thread_squad_id(void) const noexcept { return threadSquadId_; }
-#endif // _WIN32
-
-    void
-    launch_threads(void) noexcept // We cannot really handle thread launch/resume failure.
-    {
-        if (running_) return;
-        running_ = true;
-
-#if defined(_WIN32)
-            // Resume threads.
-        for (int i = 0; i < numThreads_; ++i)
-        {
-            DWORD result = ::ResumeThread(handles_[i].get());
-            detail::win32_assert(result != DWORD(-1));
-        }
-#elif defined(USE_PTHREAD)
-            // Create threads; set core affinity if desired.
-        for (int i = 0; i < numThreads_; ++i)
-        {
-            PThreadAttr attr;
-# if defined(USE_PTHREAD_SETAFFINITY)
-            if (pinToHardwareThreads_)
-            {
-                detail::setThreadAttrAffinity(attr.attr, get_hardware_thread_id(i, maxNumHardwareThreads_, hardwareThreadMappings_));
-            }
-# endif // defined(USE_PTHREAD_SETAFFINITY)
-            auto handle = pthread_t{ };
-            detail::posix_check(::pthread_create(&handle, &attr.attr, &thread_squad_thread::threadFunc, &syncData_[i]));
-            handles_[i] = pthread_handle(handle);
-        }
-
-# if defined(USE_PTHREAD_SETAFFINITY)
-            // Release thread mapping data.
-        hardwareThreadMappings_ = { };
-# endif // defined(USE_PTHREAD_SETAFFINITY)
-#else
-# error Unsupported operating system.
-#endif
-    }
-
-    void
-    schedule_job(std::future<void>* completion, std::function<void(thread_squad::task_context)> action, int concurrency, bool last) noexcept // We cannot really handle failure in future chaining.
-    {
-        auto completionPromise = std::optional<std::promise<void>>{ };
-        if (completion != nullptr)
-        {
-            completionPromise = std::promise<void>{ };
-            *completion = completionPromise->get_future();
-        }
-        auto nextJobPromise = std::promise<std::optional<thread_squad_job>>{ };
-        nextJob_.set_value(thread_squad_job{ std::move(action), std::move(completionPromise), concurrency, last, nextJobPromise.get_future().share() });
-        nextJob_ = std::move(nextJobPromise);
-#ifdef USE_PTHREAD
-        needLaunch_ = true;
-#endif // USE_PTHREAD
-    }
-
-    void
-    close_and_free(std::future<void>* completion)
-    {
-#if defined(_WIN32)
-        schedule_termination(completion);
-        launch_threads(); // The only clean way to quit never-resumed threads on Windows is to resume them and let them run to the end.
-        if (completion == nullptr)
-        {
-            join_threads_and_free();
-        }
-#elif defined(USE_PTHREAD)
-        if (needLaunch_ || running_)
-        {
-            schedule_termination(completion);
-            if (needLaunch_)
-            {
-                launch_threads();
-            }
-            if (completion == nullptr)
-            {
-                join_threads_and_free();
-            }
-        }
-        else // Threads were never launched, so we just quit and succeed immediately.
-        {
-            delete this;
-            if (completion != nullptr)
-            {
-                auto completionPromise = std::promise<void>{ };
-                completionPromise.set_value();
-                *completion = completionPromise.get_future();
-            }
-        }
-#else
-# error Unsupported operating system.
-#endif
+        return { *this, threadIdx };
     }
 };
 
-    // Like the parallel overloads of the standard algorithms, we terminate (implicitly) if an exception is thrown
-    // by a thread squad job because the semantics of exceptions in multiplexed actions are unclear.
+
 static void
-runJob(std::function<void(thread_squad::task_context)> action, thread_squad::task_context arg) noexcept
+launch_threads(thread_squad_impl& self)
+noexcept // We cannot really handle thread launch failure.
+{
+    gsl_Expects(self.needLaunch);
+    self.needLaunch = false;
+
+#if defined(_WIN32)
+        // Resume threads.
+    for (int i = 0; i < self.numThreads; ++i)
+    {
+        DWORD result = ::ResumeThread(self.handles[i].get());
+        detail::win32_assert(result != DWORD(-1));
+    }
+#elif defined(USE_PTHREAD)
+        // Create threads; set core affinity if desired.
+    for (int i = 0; i < self.numThreads; ++i)
+    {
+        PThreadAttr attr;
+# if defined(USE_PTHREAD_SETAFFINITY)
+        if (self.pinToHardwareThreads)
+        {
+            detail::setThreadAttrAffinity(attr.attr, get_hardware_thread_id(i, self.maxNumHardwareThreads, self.hardwareThreadMappings));
+        }
+# endif // defined(USE_PTHREAD_SETAFFINITY)
+        auto handle = pthread_t{ };
+        detail::posix_check(::pthread_create(&handle, &attr.attr, thread_squad_thread_func, &self.threadSyncData[i]));
+        handles[i] = pthread_handle(handle);
+    }
+
+# if defined(USE_PTHREAD_SETAFFINITY)
+        // Release thread mapping data.
+    self.hardwareThreadMappings = { };
+# endif // defined(USE_PTHREAD_SETAFFINITY)
+#else
+# error Unsupported operating system.
+#endif
+}
+
+static void
+join_threads(thread_squad_impl& self)
+noexcept // We cannot really handle join failure.
+{
+#if defined(_WIN32)
+    gsl_Expects(!self.needLaunch);
+
+        // Join threads.
+    for (int i = 0; i < self.numThreads; )
+    {
+            // Join as many threads as possible in a single syscall. It is possible that this can be improved with a tree-like wait chain.
+        HANDLE lhandles[MAXIMUM_WAIT_OBJECTS];
+        int n = std::min(self.numThreads - i, MAXIMUM_WAIT_OBJECTS);
+        for (int j = 0; j < n; ++j)
+        {
+            lhandles[j] = self.handles[i + j].get();
+        }
+        DWORD result = ::WaitForMultipleObjects(n, lhandles, TRUE, INFINITE);
+        detail::win32_assert(result != WAIT_FAILED);
+        i += n;
+    }
+#elif defined(USE_PTHREAD)
+    if (!self.needLaunch)
+    {
+            // Join threads. It is possible that this can be improved with a tree-like wait chain.
+        for (int i = 0; i < self.numThreads; ++i)
+        {
+            detail::posix_check(::pthread_join(self.handles[i].get(), NULL));
+            self.handles[i].release();
+        }
+    }
+#else
+# error Unsupported operating system.
+#endif
+}
+
+static void
+run(thread_squad_impl& self,
+    std::function<void(thread_squad::task_context)> action, int concurrency, bool join)
+noexcept // We cannot really handle exceptions here.
+{
+    gsl_Expects(action || join);
+
+    auto requestedStatus = join ? thread_status::termination_requested : thread_status::work_requested;
+    int numThreadsToWake = join ? self.numThreads : concurrency;
+    self.concurrency = concurrency;
+    self.action = std::move(action);
+    for (int i = 0; i != numThreadsToWake; ++i)
+    {
+        self.threadSyncData[i].status.store(requestedStatus, std::memory_order_relaxed);
+    }
+
+#ifdef USE_PTHREAD
+    bool wakeToJoin = join && !self.needLaunch;
+#else // ^^^ USE_PTHREAD ^^^ / vvv !USE_PTHREAD vvv
+        // The only clean way to quit never-resumed threads on Windows is to resume them and let them run to the end.
+    bool wakeToJoin = join;
+#endif // USE_PTHREAD
+
+    if ((self.action && concurrency != 0)
+        || wakeToJoin)
+    {
+            // No need to notify threads for nothing if none have been launched yet.
+        if (self.needLaunch)
+        {
+            detail::launch_threads(self);
+        }
+        else
+        {
+            self.cv.notify_all();
+        }
+    }
+
+    if (join)
+    {
+        detail::join_threads(self);
+    }
+    else
+    {
+        detail::atomic_wait_equal(self.threadSyncData[0].status, thread_status::idle);
+#ifdef DEBUG_WAIT_CHAIN
+        std::printf("waited: general <- 0\n");
+        std::fflush(stdout);
+#endif // DEBUG_WAIT_CHAIN
+    }
+}
+
+    // Like the parallel overloads of the standard algorithms, we terminate (implicitly) if an exception is thrown
+    // by a task because the semantics of exceptions in multiplexed actions are unclear.
+static void
+run_task_on_thread(std::function<void(thread_squad::task_context)> action, thread_squad::task_context arg) noexcept
 {
     action(arg);
 }
 
-void
-thread_squad_thread::operator ()(void)
+static void
+run_thread(thread_sync_data& data)
 {
-    for (;;)
+    thread_status requestedStatus;
+    do
     {
-        auto const& job = nextJob_.get();
-        if (!job.has_value())
+        std::atomic_thread_fence(std::memory_order_acquire);
+        while (data.status.load(std::memory_order_relaxed) == thread_status::idle)
         {
-            nextJob_ = { };
-            break;
+            // TODO: this can probably be tuned
+            auto lock = std::unique_lock(data.impl.mutex);
+            data.impl.cv.wait(lock);
+        }
+        requestedStatus = data.status.load(std::memory_order_acquire);
+
+        if (data.impl.action && data.threadIdx < data.impl.concurrency)
+        {
+            detail::run_task_on_thread(data.impl.action, data.impl.make_context(data.threadIdx));
         }
 
-            // Only the first `concurrency` threads shall participate in executing this task.
-        int concurrency = job->concurrency;
-        if (concurrency == 0)
+        if (requestedStatus != thread_status::termination_requested)
         {
-            concurrency = impl_.numThreads_;
-        }
-        if (threadIdx_ < concurrency)
-        {
-            runJob(job->action, thread_squad::task_context{ impl_, threadIdx_ });
-        }
-
-        if (!job->last || job->completion.has_value())
-        {
-            bool lastToArrive = impl_.wait_at_barrier();
-            if (lastToArrive && job->completion.has_value())
-            {
-                job->completion->set_value();
-            }
+            wait_for_thread(data.impl.threadSyncData, data.threadIdx, data.impl.concurrency);
+#ifdef DEBUG_WAIT_CHAIN
+            std::printf("signaling: %d\n", data.threadIdx);
+            std::fflush(stdout);
+#endif // DEBUG_WAIT_CHAIN
+            data.status.store(thread_status::idle, std::memory_order_release);
         }
 
-            // The extra indirection is necessary to keep the object alive while copying it.
-        auto newNextJob = job->nextJob;
-        nextJob_ = std::move(newNextJob);
-    }
+    } while (requestedStatus != thread_status::termination_requested);
 }
 
 #if defined(_WIN32)
-unsigned __stdcall
-thread_squad_thread::threadFunc(void* data)
+static unsigned __stdcall
+thread_squad_thread_func(void* vdata)
 {
-    thread_squad_thread& self = *static_cast<thread_squad_thread*>(data);
+    thread_sync_data& data = *static_cast<thread_sync_data*>(vdata);
     {
         wchar_t buf[64];
-        std::swprintf(buf, sizeof buf / sizeof(wchar_t), L"sysmakeshift thread squad #%d, thread %d",
-            self.impl_.thread_squad_id(), self.threadIdx_);
+        std::swprintf(buf, sizeof buf / sizeof(wchar_t), L"sysmakeshift thread squad #%u, thread %d", // TODO: %u?
+            data.impl.threadSquadId, data.threadIdx);
         detail::setCurrentThreadDescription(buf);
     }
-    self();
+
+    detail::run_thread(data);
+
     return 0;
 }
 #elif defined(USE_PTHREAD)
-void*
-thread_squad_thread::threadFunc(void* data)
+static void*
+thread_squad_thread_func(void* vdata)
 {
-    thread_squad_thread& self = *static_cast<thread_squad_thread*>(data);
-    self();
+    thread_sync_data& data = *static_cast<thread_sync_data*>(vdata);
+    detail::run_thread(data);
     return nullptr;
 }
 #else
@@ -732,9 +707,11 @@ thread_squad_thread::threadFunc(void* data)
 
 
 void
-thread_squad_impl_deleter::operator ()(thread_squad_impl_base* impl)
+thread_squad_impl_deleter::operator ()(thread_squad_impl_base* base)
 {
-    static_cast<detail::thread_squad_impl*>(impl)->close_and_free(nullptr);
+    auto impl = static_cast<thread_squad_impl*>(base);
+    auto memGuard = std::unique_ptr<thread_squad_impl>(impl);
+    detail::run(*impl, { }, 0, true);
 }
 
 
@@ -774,20 +751,9 @@ thread_squad::create(thread_squad::params p)
 void
 thread_squad::do_run(std::function<void(task_context)> action, int concurrency, bool join)
 {
-    std::future<void> completion;
-    auto& impl = static_cast<detail::thread_squad_impl&>(*handle_.get());
-    impl.schedule_job(join ? nullptr : &completion, std::move(action), concurrency, join);
-    if (join)
-    {
-        auto lhandle = detail::thread_squad_handle(std::move(handle_));
-        lhandle.release();
-        impl.close_and_free(&completion);
-    }
-    else
-    {
-        impl.launch_threads();
-    }
-    return completion;
+    if (concurrency == 0) concurrency = handle_->numThreads;
+
+    detail::run(static_cast<detail::thread_squad_impl&>(*handle_), std::move(action), concurrency, join);
 }
 
 

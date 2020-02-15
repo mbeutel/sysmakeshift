@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<AutoVisualizer xmlns="http://schemas.microsoft.com/vstudio/debugger/natvis/2010">
+
+    <Type Name="sysmakeshift::aligned_buffer&lt;*,*,*&gt;">
+        <DisplayString Condition="size_ == 0">{{ size={ size_ } data={{}} }}</DisplayString>
+        <DisplayString Condition="size_ == 1">{{ size={ size_ } data={{{ *($T1*)data_ }}} }}</DisplayString>
+        <DisplayString Condition="size_ == 2">{{ size={ size_ } data={{{ *($T1*)data_ }, { *($T1*)(data_ + bytesPerElement_*1) }}} }}</DisplayString>
+        <DisplayString Condition="size_ == 3">{{ size={ size_ } data={{{ *($T1*)data_ }, { *($T1*)(data_ + bytesPerElement_*1) }, { *($T1*)(data_ + bytesPerElement_*2) }}} }}</DisplayString>
+        <DisplayString Condition="size_ == 4">{{ size={ size_ } data={{{ *($T1*)data_ }, { *($T1*)(data_ + bytesPerElement_*1) }, { *($T1*)(data_ + bytesPerElement_*2) }, { *($T1*)(data_ + bytesPerElement_*3) }}} }}</DisplayString>
+        <DisplayString Condition="size_ == 5">{{ size={ size_ } data={{{ *($T1*)data_ }, { *($T1*)(data_ + bytesPerElement_*1) }, { *($T1*)(data_ + bytesPerElement_*2) }, { *($T1*)(data_ + bytesPerElement_*3) }, { *($T1*)(data_ + bytesPerElement_*4) }}} }}</DisplayString>
+        <DisplayString Condition="size_ == 6">{{ size={ size_ } data={{{ *($T1*)data_ }, { *($T1*)(data_ + bytesPerElement_*1) }, { *($T1*)(data_ + bytesPerElement_*2) }, { *($T1*)(data_ + bytesPerElement_*3) }, { *($T1*)(data_ + bytesPerElement_*4) }, { *($T1*)(data_ + bytesPerElement_*5) }}}</DisplayString>
+        <Expand>
+            <Item Name="[size]">size_</Item>
+            <IndexListItems>
+                <Size>size_</Size>
+                <ValueNode>*($T1*)(data_ + bytesPerElement_*$i)</ValueNode>
+            </IndexListItems>
+        </Expand>
+    </Type>
+    <!--Type Name="sysmakeshift::aligned_row_buffer&lt;*,*,*&gt;">
+        <DisplayString Condition="size_ == 0">{{ }}</DisplayString>
+        <DisplayString Condition="size_ == 1">{{ {(*this)[0]} }}</DisplayString>
+        <DisplayString Condition="size_ == 2">{{ {(*this)[0]}, {(*this)[1]} }}</DisplayString>
+        <DisplayString Condition="size_ == 3">{{ {(*this)[0]}, {(*this)[1]}, {(*this)[2]} }}</DisplayString>
+        <DisplayString Condition="size_ == 4">{{ {(*this)[0]}, {(*this)[1]}, {(*this)[2]}, {(*this)[3]} }}</DisplayString>
+        <DisplayString Condition="size_ == 5">{{ {(*this)[0]}, {(*this)[1]}, {(*this)[2]}, {(*this)[3]}, {(*this)[4]} }}</DisplayString>
+        <DisplayString Condition="size_ == 6">{{ {(*this)[0]}, {(*this)[1]}, {(*this)[2]}, {(*this)[3]}, {(*this)[4]}, {(*this)[5]} }}</DisplayString>
+        <Expand>
+            <Item Name="[rows]">rows_</Item>
+            <Item Name="[cols]">cols_</Item>
+            <IndexListItems>
+                <Size>rows_*cols_</Size>
+                <ValueNode>*($T1*)((*this) + bytesPerRow_*($i))</ValueNode>
+            </IndexListItems>
+        </Expand>
+    </Type-->
+
+</AutoVisualizer>
