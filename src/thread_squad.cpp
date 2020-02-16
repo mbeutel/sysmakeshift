@@ -295,17 +295,37 @@ void atomic_wait_equal(std::atomic<T>& a, T expected)
     std::atomic_thread_fence(std::memory_order_acquire);
 }
 
+template <typename T>
+void store_and_notify(
+    std::mutex& mutex, std::condition_variable& cv,
+    std::atomic<T>& a, T newValue)
+{
+    {
+        auto lock = std::lock_guard(mutex);
+        a.store(newValue, std::memory_order_relaxed);
+    }
+    cv.notify_one();
+}
+
+struct thread_notify_data
+{
+    std::mutex mutex;
+    std::condition_variable cv;
+};
+
 struct thread_sync_data
 {
+    std::atomic<int> newSense;
     std::atomic<int> sense;
-    thread_squad_impl& impl;
     int threadIdx;
     int numSubthreads;
+    thread_squad_impl& impl;
 
     thread_sync_data(thread_squad_impl& _impl) noexcept
-        : sense(0),
-          impl(_impl),
-          numSubthreads(0)
+        : newSense(0),
+          sense(0),
+          numSubthreads(0),
+          impl(_impl)
     {
     }
 };
@@ -332,15 +352,6 @@ next_substride(int stride)
 //      X X X X X X X X X     X X X X X X X X     X X X X X X X     X X X X X X
 //      X X X X X X X X X     X X X X X X X X     X X X X X X X     X X X X X X
 //      X X X X X X X X X     X X X X X X X X     X X X X X X X     X X X X X X
-//
-//      w-^
-//      w---^                 w-^                              
-//                  w-^           w-^             w-^               
-//                  w---^     w---^                   w-^           w---^
-//      w-----------^                 w-^         w---^             w-^
-//            w---^                       w-^             w-^             w---^
-//            w-^                     w---^               w---^           w-^
-//      w-----^               w-------^           w-------^         w-----^
 //
 //      w-^   w-^   w-^       w-^ w-^ w-^ w-^     w-^ w-^ w-^       w-^   w-^
 //      w---^ w---^ w---^     w---^   w---^       w---^   w---^     w---^ w---^
@@ -377,6 +388,39 @@ init(
         threadSyncData[i].threadIdx = i;
     }
     init_range(threadSyncData, 0, numThreads, numThreads);
+}
+
+static void
+notify_thread(
+    aligned_buffer<thread_sync_data, cache_line_alignment>& threadSyncData,
+    aligned_buffer<thread_notify_data, cache_line_alignment>& threadNotifyData,
+    int newSense,
+    int first, int last, int stride)
+{
+    while (stride != 1)
+    {
+        int substride = next_substride(stride);
+        for (int i = first + substride; i < last; i += substride)
+        {
+#ifdef DEBUG_WAIT_CHAIN
+            std::printf("notifying: %d -> %d\n", first, i);
+            std::fflush(stdout);
+#endif // DEBUG_WAIT_CHAIN
+            store_and_notify(threadNotifyData[i].mutex, threadNotifyData[i].cv, threadSyncData[i].newSense, newSense);
+        }
+        stride = substride;
+    }
+}
+
+static void
+notify_thread(
+    aligned_buffer<thread_sync_data, cache_line_alignment>& threadSyncData,
+    aligned_buffer<thread_notify_data, cache_line_alignment>& threadNotifyData,
+    int newSense,
+    int threadIdx, int concurrency)
+{
+    int stride = threadSyncData[threadIdx].numSubthreads;
+    notify_thread(threadSyncData, threadNotifyData, newSense, threadIdx, std::min(threadIdx + stride, concurrency), stride);
 }
 
 static void
@@ -443,13 +487,15 @@ struct thread_squad_impl : thread_squad_impl_base
 #endif // _WIN32
 
         // synchronization data
-    std::mutex mutex;
-    std::condition_variable cv;
+    //std::mutex mutex;
+    //std::condition_variable cv;
+    aligned_buffer<thread_notify_data, cache_line_alignment> threadNotifyData;
     aligned_buffer<thread_sync_data, cache_line_alignment> threadSyncData;
 
         // task-specific data
     std::function<void(thread_squad::task_context)> action;
-    std::atomic<int> sense;
+    //std::atomic<int> sense;
+    int sense;
     int concurrency;
     bool terminationRequested;
 
@@ -466,6 +512,7 @@ struct thread_squad_impl : thread_squad_impl_base
     thread_squad_impl(thread_squad::params const& p)
         : thread_squad_impl_base{ p.num_threads },
           threadSyncData(gsl::narrow<std::size_t>(p.num_threads), std::in_place, *this),
+          threadNotifyData(gsl::narrow<std::size_t>(p.num_threads)),
 #ifdef _WIN32
           threadSquadId(threadSquadCounter++),
 #endif // _WIN32
@@ -594,12 +641,14 @@ noexcept // We cannot really handle exceptions here.
     self.terminationRequested = join;
     self.concurrency = concurrency;
     self.action = std::move(action);
-    int oldSense;
-    {
-        auto lock = std::unique_lock(self.mutex);
-        oldSense = self.sense.fetch_xor(1, std::memory_order_relaxed);
-    }
-    int newSense = 1 - oldSense;
+    //int oldSense;
+    //{
+    //    auto lock = std::unique_lock(self.mutex);
+    //    oldSense = self.sense.fetch_xor(1, std::memory_order_relaxed);
+    //}
+    //int oldSense = self.sense.fetch_xor(1, std::memory_order_release);
+    //int newSense = 1 ^ oldSense;
+    self.sense = 1 ^ self.sense;
 
 #ifdef USE_PTHREAD
     bool wakeToJoin = join && !self.needLaunch;
@@ -614,11 +663,22 @@ noexcept // We cannot really handle exceptions here.
             // No need to notify threads for nothing if none have been launched yet.
         if (self.needLaunch)
         {
+            for (int i = 0; i < self.numThreads; ++i)
+            {
+                self.threadSyncData[i].newSense.store(1 ^ self.threadSyncData[i].sense.load(std::memory_order_relaxed), std::memory_order_relaxed);
+            }
             detail::launch_threads(self);
         }
         else
         {
-            self.cv.notify_all();
+            //self.cv.notify_all();
+            store_and_notify(self.threadNotifyData[0].mutex, self.threadNotifyData[0].cv, self.threadSyncData[0].newSense, self.sense);
+            //notify_thread(self.threadSyncData, self.threadNotifyData, self.sense, 0, concurrency);
+#ifdef DEBUG_WAIT_CHAIN
+            std::printf("notifying: %d -> %d\n", first, i);
+            std::fflush(stdout);
+#endif // DEBUG_WAIT_CHAIN
+            //self.threadNotifyData[0].cv.notify_one();
         }
     }
 
@@ -628,7 +688,7 @@ noexcept // We cannot really handle exceptions here.
     }
     else
     {
-        detail::atomic_wait_equal(self.threadSyncData[0].sense, newSense);
+        detail::atomic_wait_equal(self.threadSyncData[0].sense, self.sense);
 #ifdef DEBUG_WAIT_CHAIN
         std::printf("waited: general <- 0\n");
         std::fflush(stdout);
@@ -645,38 +705,52 @@ run_task_on_thread(std::function<void(thread_squad::task_context)> action, threa
 }
 
 static void
-run_thread(thread_sync_data& data)
+run_thread(thread_sync_data& syncData, thread_notify_data& notifyData)
 {
+    bool justWoken = true;
     do
     {
-        std::atomic_thread_fence(std::memory_order_acquire);
-        while (data.sense.load(std::memory_order_relaxed) == data.impl.sense)
+        auto oldSense = syncData.sense.load(std::memory_order_relaxed);
+        if (syncData.newSense.load(std::memory_order_relaxed) == oldSense)
         {
             // TODO: this can probably be tuned
-            auto lock = std::unique_lock(data.impl.mutex);
-            while (data.sense.load(std::memory_order_relaxed) == data.impl.sense)
+            auto lock = std::unique_lock(notifyData.mutex);
+            while (syncData.newSense.load(std::memory_order_relaxed) == oldSense)
             {
-                data.impl.cv.wait(lock);
+                notifyData.cv.wait(lock);
             }
         }
-        auto newSense = data.impl.sense.load(std::memory_order_relaxed);
+        std::atomic_thread_fence(std::memory_order_acquire);
+        auto newSense = syncData.newSense.load(std::memory_order_relaxed);
 
-        if (data.impl.action && data.threadIdx < data.impl.concurrency)
+        if (justWoken)
         {
-            detail::run_task_on_thread(data.impl.action, data.impl.make_context(data.threadIdx));
+            justWoken = false;
+        }
+        else
+        {
+            int numThreadsToWake = syncData.impl.terminationRequested
+                ? syncData.impl.numThreads
+                : syncData.impl.concurrency;
+            notify_thread(syncData.impl.threadSyncData, syncData.impl.threadNotifyData, newSense, syncData.threadIdx, numThreadsToWake);
         }
 
-        if (!data.impl.terminationRequested)
+        if (syncData.impl.action && syncData.threadIdx < syncData.impl.concurrency)
         {
-            wait_for_thread(data.impl.threadSyncData, newSense, data.threadIdx, data.impl.concurrency);
+            detail::run_task_on_thread(syncData.impl.action, syncData.impl.make_context(syncData.threadIdx));
+        }
+
+        if (!syncData.impl.terminationRequested)
+        {
+            wait_for_thread(syncData.impl.threadSyncData, newSense, syncData.threadIdx, syncData.impl.concurrency);
 #ifdef DEBUG_WAIT_CHAIN
-            std::printf("signaling: %d\n", data.threadIdx);
+            std::printf("signaling: %d\n", syncData.threadIdx);
             std::fflush(stdout);
 #endif // DEBUG_WAIT_CHAIN
-            data.sense.store(newSense, std::memory_order_release);
+            syncData.sense.store(newSense, std::memory_order_release);
         }
 
-    } while (!data.impl.terminationRequested);
+    } while (!syncData.impl.terminationRequested);
 }
 
 #if defined(_WIN32)
@@ -691,7 +765,7 @@ thread_squad_thread_func(void* vdata)
         detail::setCurrentThreadDescription(buf);
     }
 
-    detail::run_thread(data);
+    detail::run_thread(data, data.impl.threadNotifyData[data.threadIdx]);
 
     return 0;
 }
@@ -700,7 +774,9 @@ static void*
 thread_squad_thread_func(void* vdata)
 {
     thread_sync_data& data = *static_cast<thread_sync_data*>(vdata);
-    detail::run_thread(data);
+
+    detail::run_thread(data, data.impl.threadNotifyData[data.threadIdx]);
+
     return nullptr;
 }
 #else
