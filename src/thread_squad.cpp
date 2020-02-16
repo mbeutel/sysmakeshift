@@ -35,7 +35,9 @@
 # error Unsupported operating system.
 #endif
 
-#include <emmintrin.h> // TODO: guard for x86
+#if defined(__i386__) || defined(__x86_64__) || defined(_M_IX86) || defined(_M_X64)
+# include <emmintrin.h>
+#endif // defined(__i386__) || defined(__x86_64__) || defined(_M_IX86) || defined(_M_X64)
 
 #if defined(_WIN32) || defined(USE_PTHREAD_SETAFFINITY)
 # define THREAD_PINNING_SUPPORTED
@@ -292,20 +294,32 @@ constexpr int spinRep = 2;
 constexpr int pauseCount = 9;
 constexpr int yieldCount = 6;
 
+#if defined(__i386__) || defined(__x86_64__) || defined(_M_IX86) || defined(_M_X64)
+static inline void pause(void)
+{
+    _mm_pause();
+}
+#else
+static inline void pause(void)
+{
+    [[maybe_unused]] volatile int v = 0;
+}
+#endif // defined(__i386__) || defined(__x86_64__) || defined(_M_IX86) || defined(_M_X64)
+
 template <typename T>
-bool wait_equal_exp_backoff(std::atomic<T>& a, T expected)
+bool wait_equal_exponential_backoff(std::atomic<T>& a, T expected)
 {
     if (a.load(std::memory_order_relaxed) == expected) return true;
     for (int i = 0; i < (1 << pauseCount); ++i)
     {
         int n = 1;
-        for (int i = 0; i < spinCount; ++i)
+        for (int j = 0; j < spinCount; ++j)
         {
             for (int r = 0; r < spinRep; ++r)
             {
-                for (int j = 0; j < n; ++j)
+                for (int k = 0; k < n; ++k)
                 {
-                    volatile int k = j;
+                    [[maybe_unused]] volatile int v = k;
                 }
                 if (a.load(std::memory_order_relaxed) == expected) return true;
             }
@@ -324,7 +338,7 @@ bool wait_equal_exp_backoff(std::atomic<T>& a, T expected)
 template <typename T>
 void atomic_wait_equal(std::atomic<T>& a, T expected)
 {
-    if (!detail::wait_equal_exp_backoff(a, expected))
+    if (!detail::wait_equal_exponential_backoff(a, expected))
     {
         while (a.load(std::memory_order_relaxed) != expected)
         {
@@ -339,7 +353,7 @@ void wait_and_load(
     std::mutex& mutex, std::condition_variable& cv,
     std::atomic<T>& a, T expected)
 {
-    if (!detail::wait_equal_exp_backoff(a, expected))
+    if (!detail::wait_equal_exponential_backoff(a, expected))
     {
         auto lock = std::unique_lock(mutex);
         while (a.load(std::memory_order_relaxed) != expected)
@@ -445,7 +459,7 @@ init(
     init_range(threadSyncData, 0, numThreads, numThreads);
 }
 
-static void
+/*static void
 notify_threads(
     aligned_buffer<thread_sync_data, cache_line_alignment>& threadSyncData,
     aligned_buffer<thread_notify_data, cache_line_alignment>& threadNotifyData,
@@ -479,7 +493,7 @@ notify_threads(
 {
     int stride = threadSyncData[threadIdx].numSubthreads;
     notify_threads(threadSyncData, threadNotifyData, newSense, threadIdx, std::min(threadIdx + stride, concurrency), stride);
-}
+}*/
 
 static void
 notify_thread(
