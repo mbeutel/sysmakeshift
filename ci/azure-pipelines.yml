@@ -8,18 +8,18 @@ pr:
 
 resources:
   repositories:
-    - repository: templates
+    - repository: CImakeshift
       type: github
       name: mbeutel/CImakeshift
       endpoint: mbeutel
       #ref: refs/tags/0.2
 
 jobs:
-- template: azure-pipelines-job-cmake.yml@templates
+- template: azure-pipelines/cmake.yml@CImakeshift
   parameters:
-    vcpkgRef: bc01338fe2d50f4a24b7f56b53bc385d8de8ccd9
+    vcpkgRef: 5deea3b975fe62990973d73a102de818d83ba20c
     vcpkgOverlayRepo: 'https://mp-force.ziti.uni-heidelberg.de/asc/infrastructure/vcpkg-ports.git'
-    vcpkgOverlayRef: a3af41edd36c5a2be17d44f2da0085db11b36331
+    vcpkgOverlayRef: 10fe870259f4d716b83cc3792710b47d6b407b16
     vcpkgPackages: ['cmakeshift', 'gsl-lite', 'catch2']
 
     cmakeBuildConfigurations: [Debug]
