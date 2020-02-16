@@ -319,7 +319,7 @@ bool wait_equal_exponential_backoff(std::atomic<T>& a, T expected)
             {
                 for (int k = 0; k < n; ++k)
                 {
-                    [[maybe_unused]] volatile int v = k;
+                    [[maybe_unused]] volatile int v = j + k;
                 }
                 if (a.load(std::memory_order_relaxed) == expected) return true;
             }
@@ -402,18 +402,16 @@ struct thread_sync_data
 static int
 next_substride(int stride)
 {
+    return (stride + 7) / 8;
+    /*if (stride % 3 == 0)
+    {
+        return stride /= 3;
+    }
     if (stride % 2 == 0)
     {
         return stride /= 2;
     }
-    else if (stride % 3 == 0)
-    {
-        return stride /= 3;
-    }
-    else
-    {
-        return (stride + 1) / 2;
-    }
+    return (stride + 1) / 2;*/
 }
 
 
