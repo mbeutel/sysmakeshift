@@ -325,7 +325,7 @@ bool wait_equal_exponential_backoff(std::atomic<T>& a, T expected)
             }
             n *= 2;
         }
-        _mm_pause();
+        detail::pause();
     }
     for (int i = 0; i < (1 << yieldCount); ++i)
     {
