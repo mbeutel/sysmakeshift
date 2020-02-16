@@ -35,6 +35,8 @@
 # error Unsupported operating system.
 #endif
 
+#include <emmintrin.h> // TODO: guard for x86
+
 #if defined(_WIN32) || defined(USE_PTHREAD_SETAFFINITY)
 # define THREAD_PINNING_SUPPORTED
 #endif // defined(_WIN32) || defined(USE_PTHREAD_SETAFFINITY)
@@ -285,12 +287,65 @@ static std::atomic<unsigned> threadSquadCounter{ };
 #endif // _WIN32
 
 
+constexpr int spinCount = 4;
+constexpr int spinRep = 2;
+constexpr int pauseCount = 9;
+constexpr int yieldCount = 6;
+
+template <typename T>
+bool wait_equal_exp_backoff(std::atomic<T>& a, T expected)
+{
+    if (a.load(std::memory_order_relaxed) == expected) return true;
+    for (int i = 0; i < (1 << pauseCount); ++i)
+    {
+        int n = 1;
+        for (int i = 0; i < spinCount; ++i)
+        {
+            for (int r = 0; r < spinRep; ++r)
+            {
+                for (int j = 0; j < n; ++j)
+                {
+                    volatile int k = j;
+                }
+                if (a.load(std::memory_order_relaxed) == expected) return true;
+            }
+            n *= 2;
+        }
+        _mm_pause();
+    }
+    for (int i = 0; i < (1 << yieldCount); ++i)
+    {
+        std::this_thread::yield();
+        if (a.load(std::memory_order_relaxed) == expected) return true;
+    }
+    return false;
+}
+
 template <typename T>
 void atomic_wait_equal(std::atomic<T>& a, T expected)
 {
-    while (a.load(std::memory_order_relaxed) != expected)
+    if (!detail::wait_equal_exp_backoff(a, expected))
     {
-        std::this_thread::yield(); // TODO: improve this with spinning, PAUSE, and exponential backoff
+        while (a.load(std::memory_order_relaxed) != expected)
+        {
+            std::this_thread::yield();
+        }
+    }
+    std::atomic_thread_fence(std::memory_order_acquire);
+}
+
+template <typename T>
+void wait_and_load(
+    std::mutex& mutex, std::condition_variable& cv,
+    std::atomic<T>& a, T expected)
+{
+    if (!detail::wait_equal_exp_backoff(a, expected))
+    {
+        auto lock = std::unique_lock(mutex);
+        while (a.load(std::memory_order_relaxed) != expected)
+        {
+            cv.wait(lock);
+        }
     }
     std::atomic_thread_fence(std::memory_order_acquire);
 }
@@ -697,14 +752,14 @@ noexcept // We cannot really handle exceptions here.
         }
         else
         {
-            /*store_and_notify(self.threadNotifyData[0].mutex, self.threadNotifyData[0].cv, self.threadSyncData[0].newSense, self.sense);
+            store_and_notify(self.threadNotifyData[0].mutex, self.threadNotifyData[0].cv, self.threadSyncData[0].newSense, self.sense);
 #ifdef DEBUG_WAIT_CHAIN
             std::printf("notifying: general -> 0\n");
             std::fflush(stdout);
-#endif // DEBUG_WAIT_CHAIN*/
-            int numThreadsToWake = self.terminationRequested
+#endif // DEBUG_WAIT_CHAIN
+            /*int numThreadsToWake = self.terminationRequested
                 ? self.numThreads
-                : self.concurrency;
+                : self.concurrency;*/
             /*for (int i = 0; i < numThreadsToWake; ++i)
             {
 #ifdef DEBUG_WAIT_CHAIN
@@ -713,12 +768,12 @@ noexcept // We cannot really handle exceptions here.
 #endif // DEBUG_WAIT_CHAIN
                 store_and_notify(self.threadNotifyData[i].mutex, self.threadNotifyData[i].cv, self.threadSyncData[i].newSense, self.sense);
             }*/
-#ifdef DEBUG_WAIT_CHAIN
+/*#ifdef DEBUG_WAIT_CHAIN
             std::printf("notifying: general -> 0\n");
             std::fflush(stdout);
 #endif // DEBUG_WAIT_CHAIN
             store_and_notify(self.threadNotifyData[0].mutex, self.threadNotifyData[0].cv, self.threadSyncData[0].newSense, self.sense);
-            detail::notify_threads(self.threadSyncData, self.threadNotifyData, self.sense, 0, numThreadsToWake);
+            detail::notify_threads(self.threadSyncData, self.threadNotifyData, self.sense, 0, numThreadsToWake);*/
         }
     }
 
@@ -751,19 +806,10 @@ run_thread(thread_sync_data& syncData, thread_notify_data& notifyData)
     do
     {
         auto oldSense = syncData.sense.load(std::memory_order_relaxed);
-        if (syncData.newSense.load(std::memory_order_relaxed) == oldSense)
-        {
-            // TODO: this can probably be tuned
-            auto lock = std::unique_lock(notifyData.mutex);
-            while (syncData.newSense.load(std::memory_order_relaxed) == oldSense)
-            {
-                notifyData.cv.wait(lock);
-            }
-        }
-        std::atomic_thread_fence(std::memory_order_acquire);
-        auto newSense = syncData.newSense.load(std::memory_order_relaxed);
+        auto newSense = 1 ^ oldSense;
+        wait_and_load(notifyData.mutex, notifyData.cv, syncData.newSense, newSense);
 
-        /*if (justWoken)
+        if (justWoken)
         {
             justWoken = false;
         }
@@ -773,7 +819,7 @@ run_thread(thread_sync_data& syncData, thread_notify_data& notifyData)
                 ? syncData.impl.numThreads
                 : syncData.impl.concurrency;
             notify_thread(syncData.impl.threadSyncData, syncData.impl.threadNotifyData, newSense, syncData.threadIdx, numThreadsToWake);
-        }*/
+        }
 
         if (syncData.impl.action && syncData.threadIdx < syncData.impl.concurrency)
         {
