@@ -37,7 +37,7 @@ TEST_CASE("thread_squad")
         /*.num_threads = */ numThreads
     };
 #ifdef THREAD_PINNING_SUPPORTED
-    params.pin_to_hardware_threads = true;
+    params.pin_to_hardware_threads = GENERATE(false, true);
 #endif // !THREAD_PINNING_SUPPORTED
 
     auto action = [&]
@@ -52,9 +52,10 @@ TEST_CASE("thread_squad")
     SECTION("single task")
     {
         sysmakeshift::thread_squad(params).run(action);
-#ifdef THREAD_PINNING_SUPPORTED
-        CHECK(threadId_Count.size() == static_cast<std::size_t>(numActualThreads));
-#endif // THREAD_PINNING_SUPPORTED
+        if (params.pin_to_hardware_threads)
+        {
+            CHECK(threadId_Count.size() == static_cast<std::size_t>(numActualThreads));
+        }
         CHECK(threadIndex_Count.size() == static_cast<std::size_t>(numActualThreads));
     }
 
@@ -71,21 +72,35 @@ TEST_CASE("thread_squad")
 
         if (numTasks != 0)
         {
-#ifdef THREAD_PINNING_SUPPORTED
-            CHECK(threadId_Count.size() == static_cast<std::size_t>(numActualThreads));
-#endif // THREAD_PINNING_SUPPORTED
+            if (params.pin_to_hardware_threads)
+            {
+                CHECK(threadId_Count.size() == static_cast<std::size_t>(numActualThreads));
+            }
             CHECK(threadIndex_Count.size() == static_cast<std::size_t>(numActualThreads));
         }
 
-#ifdef THREAD_PINNING_SUPPORTED
-        for (auto const& id_count : threadId_Count)
+        if (params.pin_to_hardware_threads)
         {
-            CHECK(id_count.second == numTasks);
+            for (auto const& id_count : threadId_Count)
+            {
+                CHECK(id_count.second == numTasks);
+            }
         }
-#endif // THREAD_PINNING_SUPPORTED
         for (auto const& index_count : threadIndex_Count)
         {
             CHECK(index_count.second == numTasks);
+        }
+    }
+
+    SECTION("no deadlocks")
+    {
+        int numTasks = GENERATE(0, 1, 2, 5, 10, 20);
+        CAPTURE(numTasks);
+
+        auto threadSquad = sysmakeshift::thread_squad(params);
+        for (int i = 0; i < numTasks; ++i)
+        {
+            threadSquad.run([](auto const&){ });
         }
     }
 

@@ -554,6 +554,7 @@ wait_for_thread(
 }
 
 
+#ifdef THREAD_PINNING_SUPPORTED
 static std::size_t
 get_hardware_thread_id(int threadIdx, int maxNumHardwareThreads, gsl::span<int const> hardwareThreadMappings)
 {
@@ -562,6 +563,7 @@ get_hardware_thread_id(int threadIdx, int maxNumHardwareThreads, gsl::span<int c
         !hardwareThreadMappings.empty() ? hardwareThreadMappings[subidx]
         : subidx);
 }
+#endif // THREAD_PINNING_SUPPORTED
 
 
 #if defined(_WIN32)
