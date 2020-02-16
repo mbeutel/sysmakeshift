@@ -128,19 +128,19 @@ struct cpu_set
 {
 private:
     std::size_t cpuCount_;
-    cpu_set_t* syncData_;
+    cpu_set_t* data_;
 
 public:
     cpu_set(void)
         : cpuCount_(std::thread::hardware_concurrency())
     {
-        syncData_ = CPU_ALLOC(cpuCount_);
-        if (syncData_ == nullptr)
+        data_ = CPU_ALLOC(cpuCount_);
+        if (data_ == nullptr)
         {
             throw std::bad_alloc();
         }
         std::size_t lsize = size();
-        CPU_ZERO_S(lsize, syncData_);
+        CPU_ZERO_S(lsize, data_);
     }
     std::size_t
     size(void) const noexcept
@@ -150,18 +150,18 @@ public:
     const cpu_set_t*
     data(void) const noexcept
     {
-        return syncData_;
+        return data_;
     }
     void
     set_cpu_flag(std::size_t coreIdx)
     {
         gsl_Expects(coreIdx < cpuCount_);
         std::size_t lsize = size();
-        CPU_SET_S(coreIdx, lsize, syncData_);
+        CPU_SET_S(coreIdx, lsize, data_);
     }
     ~cpu_set(void)
     {
-        CPU_FREE(syncData_);
+        CPU_FREE(data_);
     }
 };
 
@@ -289,11 +289,6 @@ static std::atomic<unsigned> threadSquadCounter{ };
 #endif // _WIN32
 
 
-constexpr int spinCount = 4;
-constexpr int spinRep = 2;
-constexpr int pauseCount = 9;
-constexpr int yieldCount = 6;
-
 #if defined(__i386__) || defined(__x86_64__) || defined(_M_IX86) || defined(_M_X64)
 static inline void pause(void)
 {
@@ -305,6 +300,11 @@ static inline void pause(void)
     [[maybe_unused]] volatile int v = 0;
 }
 #endif // defined(__i386__) || defined(__x86_64__) || defined(_M_IX86) || defined(_M_X64)
+
+constexpr int spinCount = 4;
+constexpr int spinRep = 2;
+constexpr int pauseCount = 9;
+constexpr int yieldCount = 6;
 
 template <typename T>
 bool wait_equal_exponential_backoff(std::atomic<T>& a, T expected)
@@ -418,16 +418,16 @@ next_substride(int stride)
 
 
 //
-//      X X X X X X X X X     X X X X X X X X     X X X X X X X     X X X X X X
-//      X X X X X X X X X     X X X X X X X X     X X X X X X X     X X X X X X
-//      X X X X X X X X X     X X X X X X X X     X X X X X X X     X X X X X X
+//      Threads:            X X X X X X X X X     X X X X X X X X     X X X X X X X     X X X X X X
+//                          X X X X X X X X X     X X X X X X X X     X X X X X X X     X X X X X X
+//                          X X X X X X X X X     X X X X X X X X     X X X X X X X     X X X X X X
 //
-//      w-^   w-^   w-^       w-^ w-^ w-^ w-^     w-^ w-^ w-^       w-^   w-^
-//      w---^ w---^ w---^     w---^   w---^       w---^   w---^     w---^ w---^
-//      w-----^               w-------^           w-------^         w-----^
-//      w-----------^
+//      Wait sequence:      w-^   w-^   w-^       w-^ w-^ w-^ w-^     w-^ w-^ w-^       w-^   w-^
+//                          w---^ w---^ w---^     w---^   w---^       w---^   w---^     w---^ w---^
+//                          w-----^               w-------^           w-------^         w-----^
+//                          w-----------^
 //
-//      9 1 1 3 1 1 3 1 1     8 1 2 1 4 1 2 1     8 1 2 1 4 1 2     6 1 1 3 1 1
+//      Subthread counts:   9 1 1 3 1 1 3 1 1     8 1 2 1 4 1 2 1     8 1 2 1 4 1 2     6 1 1 3 1 1
 //
 
 
