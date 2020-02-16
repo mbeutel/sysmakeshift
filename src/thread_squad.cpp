@@ -397,16 +397,21 @@ notify_threads(
     int newSense,
     int first, int last, int stride)
 {
-    int substride = next_substride(stride);
-#ifdef DEBUG_WAIT_CHAIN
-    std::printf("notifying: %d -> %d\n", first, i);
-    std::fflush(stdout);
-#endif // DEBUG_WAIT_CHAIN
-    store_and_notify(threadNotifyData[first].mutex, threadNotifyData[first].cv, threadSyncData[first].newSense, newSense);
-
-    for (int i = first + substride; i < last; i += substride)
+    if (stride != 1)
     {
-        notify_threads(threadSyncData, threadNotifyData, newSense, i, std::min(i + substride, last), substride);
+        int substride = next_substride(stride);
+        for (int i = first + substride; i < last; i += substride)
+        {
+#ifdef DEBUG_WAIT_CHAIN
+            std::printf("notifying: general -> %d\n", i);
+            std::fflush(stdout);
+#endif // DEBUG_WAIT_CHAIN
+            store_and_notify(threadNotifyData[i].mutex, threadNotifyData[i].cv, threadSyncData[i].newSense, newSense);
+        }
+        for (int i = first; i < last; i += substride)
+        {
+            notify_threads(threadSyncData, threadNotifyData, newSense, i, std::min(i + substride, last), substride);
+        }
     }
 }
 
@@ -708,6 +713,11 @@ noexcept // We cannot really handle exceptions here.
 #endif // DEBUG_WAIT_CHAIN
                 store_and_notify(self.threadNotifyData[i].mutex, self.threadNotifyData[i].cv, self.threadSyncData[i].newSense, self.sense);
             }*/
+#ifdef DEBUG_WAIT_CHAIN
+            std::printf("notifying: general -> 0\n");
+            std::fflush(stdout);
+#endif // DEBUG_WAIT_CHAIN
+            store_and_notify(self.threadNotifyData[0].mutex, self.threadNotifyData[0].cv, self.threadSyncData[0].newSense, self.sense);
             detail::notify_threads(self.threadSyncData, self.threadNotifyData, self.sense, 0, numThreadsToWake);
         }
     }
