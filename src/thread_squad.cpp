@@ -371,7 +371,8 @@ void store_and_notify(
 {
     {
         auto lock = std::lock_guard(mutex);
-        a.store(newValue, std::memory_order_relaxed);
+        //a.store(newValue, std::memory_order_relaxed);
+        a.fetch_xor(1, std::memory_order_relaxed);
     }
     cv.notify_one();
 }
@@ -758,7 +759,8 @@ noexcept // We cannot really handle exceptions here.
         {
             for (int i = 0; i < self.numThreads; ++i)
             {
-                self.threadSyncData[i].newSense.store(1 ^ self.threadSyncData[i].sense.load(std::memory_order_relaxed), std::memory_order_relaxed);
+                //self.threadSyncData[i].newSense.store(1 ^ self.threadSyncData[i].sense.load(std::memory_order_relaxed), std::memory_order_relaxed);
+                self.threadSyncData[i].newSense.fetch_xor(1, std::memory_order_relaxed);
             }
             detail::launch_threads(self);
         }
