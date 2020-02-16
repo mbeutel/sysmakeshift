@@ -121,7 +121,7 @@ physical_concurrency(void) noexcept
         return gsl::narrow<unsigned>(numUnique);
 # elif defined(__APPLE__)
         int result = 0;
-        int nbResult = sizeof result;
+        std::size_t nbResult = sizeof result;
         int ec = sysctlbyname("hw.physicalcpu", &result, &nbResult, 0, 0);
         if (ec != 0) throw std::runtime_error("cannot query hw.physicalcpu");
         return gsl::narrow<unsigned>(result);

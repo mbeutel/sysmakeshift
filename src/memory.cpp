@@ -68,6 +68,7 @@ large_page_alloc(std::size_t size)
     detail::win32_assert(data != nullptr);
     return data;
 #else
+    (void) size;
     throw std::system_error(std::make_error_code(std::errc::not_supported));
 #endif
 }
@@ -80,7 +81,9 @@ large_page_free(void* data, std::size_t size) noexcept
     (void) size;
     detail::win32_assert(::VirtualFree(data, 0, MEM_RELEASE));
 #else
-    throw std::system_error(std::make_error_code(std::errc::not_supported));
+    (void) data;
+    (void) size;
+    std::terminate(); // should never happen because `large_page_alloc()` already throws
 #endif
 }
 
