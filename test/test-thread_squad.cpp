@@ -20,6 +20,7 @@ TEST_CASE("thread_squad can schedule single task")
     GENERATE(range(0, 20)); // repetitions
 
     int numThreads = GENERATE(0, 1, 3, 10, 50);
+
     unsigned numActualThreads = static_cast<unsigned>(numThreads);
     if (numActualThreads == 0)
     {
@@ -45,15 +46,7 @@ TEST_CASE("thread_squad can schedule single task")
         threadIndices.insert(ctx.thread_index());
     };
 
-    SECTION("with synchronous completion")
-    {
-        sysmakeshift::thread_squad(params).run(action);
-    }
-    SECTION("with asynchronous completion")
-    {
-        auto completion = sysmakeshift::thread_squad(params).run_async(action);
-        completion.wait();
-    }
+    sysmakeshift::thread_squad(params).run(action);
 
     CAPTURE(numThreads);
 
@@ -67,7 +60,7 @@ TEST_CASE("thread_squad can schedule multiple tasks")
 {
     GENERATE(range(0, 10)); // repetitions
 
-    int numThreads = GENERATE(0, 1, 3, 10, 50);
+    int numThreads = GENERATE(range(0, 10), 10, 48, 50);
     unsigned numActualThreads = static_cast<unsigned>(numThreads);
     if (numActualThreads == 0)
     {
@@ -95,26 +88,10 @@ TEST_CASE("thread_squad can schedule multiple tasks")
         ++threadIndex_Count[ctx.thread_index()];
     };
 
-    SECTION("with synchronous completion")
+    auto threadSquad = sysmakeshift::thread_squad(params);
+    for (int i = 0; i < numTasks; ++i)
     {
-        auto threadSquad = sysmakeshift::thread_squad(params);
-        for (int i = 0; i < numTasks; ++i)
-        {
-            threadSquad.run(action);
-        }
-    }
-    SECTION("with asynchronous completion")
-    {
-        std::vector<std::future<void>> completions;
-        auto threadSquad = sysmakeshift::thread_squad(params);
-        for (int i = 0; i < numTasks; ++i)
-        {
-            completions.push_back(threadSquad.run_async(action));
-        }
-        for (auto& completion : completions)
-        {
-            completion.wait();
-        }
+        threadSquad.run(action);
     }
 
     CAPTURE(numThreads);

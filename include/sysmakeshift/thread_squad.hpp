@@ -3,10 +3,7 @@
 #define INCLUDED_SYSMAKESHIFT_THREAD_SQUAD_HPP_
 
 
-#include <thread>
-#include <future>
-#include <utility>    // for move(), forward<>()
-#include <memory>     // for unique_ptr<>
+#include <utility>    // for move()
 #include <functional> // for function<>
 
 #include <gsl-lite/gsl-lite.hpp> // for span<>, not_null<>, ssize(), gsl_NODISCARD
@@ -68,14 +65,13 @@ public:
         //
     class task_context
     {
-        friend detail::thread_squad_thread;
         friend detail::thread_squad_impl;
 
     private:
         detail::thread_squad_impl_base& impl_;
         int threadIdx_;
 
-        explicit task_context(detail::thread_squad_impl_base& _impl, int _threadIdx) noexcept
+        task_context(detail::thread_squad_impl_base& _impl, int _threadIdx) noexcept
             : impl_(_impl), threadIdx_(_threadIdx)
         {
         }
@@ -96,7 +92,7 @@ public:
         gsl_NODISCARD int
         num_threads(void) const noexcept
         {
-            return impl_.numThreads_;
+            return impl_.numThreads;
         }
     };
 
@@ -115,8 +111,8 @@ private:
 
     static detail::thread_squad_handle
     create(thread_squad::params p);
-    
-    std::future<void>
+
+    void
     do_run(std::function<void(task_context)> task, int concurrency, bool join);
 
 public:
@@ -139,7 +135,7 @@ public:
     gsl_NODISCARD int
     num_threads(void) const
     {
-        return handle_->numThreads_;
+        return handle_->numThreads;
     }
 
         //
@@ -154,9 +150,9 @@ public:
     run(std::function<void(task_context)> action, int concurrency = 0) &
     {
         gsl_Expects(action);
-        gsl_Expects(concurrency >= 0 && concurrency <= handle_->numThreads_);
+        gsl_Expects(concurrency >= 0 && concurrency <= handle_->numThreads);
 
-        do_run(std::move(action), concurrency, false).wait();
+        do_run(std::move(action), concurrency, false);
     }
 
         //
@@ -171,45 +167,9 @@ public:
     run(std::function<void(task_context)> action, int concurrency = 0) &&
     {
         gsl_Expects(action);
-        gsl_Expects(concurrency >= 0 && concurrency <= handle_->numThreads_);
+        gsl_Expects(concurrency >= 0 && concurrency <= handle_->numThreads);
 
-        do_run(std::move(action), concurrency, true).wait();
-    }
-
-        //
-        // Runs the given action on `concurrency` threads and returns a `std::future<void>` which represents the completion state
-        // of the tasks.
-        //ᅟ
-        // `concurrency == 0` indicates that the maximum concurrency level should be used, i.e. the task is run on all threads in
-        // the thread squad. `concurrency` must not exceed the number of threads in the thread squad.
-        // The thread squad makes a dedicated copy of `action` for every participating thread and invokes it with an appropriate
-        // task context. If `action()` throws an exception, `std::terminate()` is called.
-        //
-    gsl_NODISCARD std::future<void>
-    run_async(std::function<void(task_context)> action, int concurrency = 0) &
-    {
-        gsl_Expects(action);
-        gsl_Expects(concurrency >= 0 && concurrency <= handle_->numThreads_);
-
-        return do_run(std::move(action), concurrency, false);
-    }
-
-        //
-        // Runs the given action on `concurrency` threads and returns a `std::future<void>` which represents the completion state
-        // of the tasks.
-        //ᅟ
-        // `concurrency == 0` indicates that the maximum concurrency level should be used, i.e. the task is run on all threads in
-        // the thread squad. `concurrency` must not exceed the number of threads in the thread squad.
-        // The thread squad makes a dedicated copy of `action` for every participating thread and invokes it with an appropriate
-        // task context. If `action()` throws an exception, `std::terminate()` is called.
-        //
-    gsl_NODISCARD std::future<void>
-    run_async(std::function<void(task_context)> action, int concurrency = 0) &&
-    {
-        gsl_Expects(action);
-        gsl_Expects(concurrency >= 0 && concurrency <= handle_->numThreads_);
-
-        return do_run(std::move(action), concurrency, true);
+        do_run(std::move(action), concurrency, true);
     }
 };
 

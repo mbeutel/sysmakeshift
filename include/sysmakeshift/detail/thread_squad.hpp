@@ -11,18 +11,16 @@ namespace sysmakeshift {
 namespace detail {
 
 
-struct thread_squad_thread;
-
 struct thread_squad_impl_base
 {
-    int numThreads_;
+    int numThreads;
 };
 struct thread_squad_impl;
 
 struct thread_squad_impl_deleter
 {
     void
-    operator ()(thread_squad_impl_base* impl);
+    operator ()(thread_squad_impl_base* base);
 };
 
 using thread_squad_handle = std::unique_ptr<detail::thread_squad_impl_base, thread_squad_impl_deleter>;
