@@ -94,6 +94,8 @@ TEST_CASE("thread_squad")
 
     SECTION("no deadlocks")
     {
+        GENERATE(range(0, 10)); // more repetitions
+
         int numTasks = GENERATE(0, 1, 2, 5, 10, 20);
         CAPTURE(numTasks);
 

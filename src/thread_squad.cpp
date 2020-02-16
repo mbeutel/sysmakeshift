@@ -754,7 +754,7 @@ noexcept // We cannot really handle exceptions here.
             int numThreadsToWake = join ? self.numThreads : concurrency;
             for (int i = 0; i < numThreadsToWake; ++i)
             {
-                self.threadSyncData[i].newSense.fetch_xor(1, std::memory_order_relaxed);
+                self.threadSyncData[i].newSense.store(1, std::memory_order_relaxed);
             }
             detail::launch_threads(self);
         }
