@@ -306,13 +306,14 @@ constexpr int yieldCount = 6;
 
 template <typename T>
 bool
-wait_equal_exponential_backoff(std::atomic<T> const& a, T oldValue)
+wait_equal_exponential_backoff(std::atomic<T> const& a, T oldValue, bool spinWait = true)
 {
+    int lspinCount = spinWait ? spinCount : 1;
     if (a.load(std::memory_order_relaxed) != oldValue) return true;
     for (int i = 0; i < (1 << pauseCount); ++i)
     {
         int n = 1;
-        for (int j = 0; j < spinCount; ++j)
+        for (int j = 0; j < lspinCount; ++j)
         {
             for (int r = 0; r < spinRep; ++r)
             {
@@ -336,9 +337,9 @@ wait_equal_exponential_backoff(std::atomic<T> const& a, T oldValue)
 
 template <typename T>
 T
-atomic_wait_while_equal(std::atomic<T> const& a, T oldValue)
+atomic_wait_while_equal(std::atomic<T> const& a, T oldValue, bool spinWait = true)
 {
-    if (!detail::wait_equal_exponential_backoff(a, oldValue))
+    if (!detail::wait_equal_exponential_backoff(a, oldValue, spinWait))
     {
         while (a.load(std::memory_order_relaxed) == oldValue)
         {
@@ -600,12 +601,12 @@ public:
     }
 
     void
-    wait_for_thread([[maybe_unused]] int callingThreadIdx, int targetThreadIdx)
+    wait_for_thread([[maybe_unused]] int callingThreadIdx, int targetThreadIdx, bool spinWait = true)
     const
     {
         int newSense_ = threadData_[targetThreadIdx].newSense_.load(std::memory_order_relaxed);
         int oldSense = 1 ^ newSense_;
-        detail::atomic_wait_while_equal(threadData_[targetThreadIdx].sense_, oldSense);
+        detail::atomic_wait_while_equal(threadData_[targetThreadIdx].sense_, oldSense, spinWait);
     #ifdef DEBUG_WAIT_CHAIN
         std::printf("thread squad #%u, thread %d: awaited %d\n", threadSquadId_, callingThreadIdx, targetThreadIdx);
         std::fflush(stdout);
@@ -884,7 +885,7 @@ noexcept // We cannot really handle exceptions here.
         {
             detail::join_threads(self);
         }
-        self.data.wait_for_thread(-1, 0);
+        self.data.wait_for_thread(-1, 0, false); // no spin wait in main thread
     }
 }
 
