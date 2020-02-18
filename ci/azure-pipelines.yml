@@ -37,7 +37,6 @@ jobs:
       cxxCompilerVersions: [19_2]
       platforms: [x86, x64]
       cmakeBuildConfigurations: [Release]
-      tag: 'Release'
 
     - os: Windows
       cxxCompiler: Clang
@@ -54,7 +53,6 @@ jobs:
       cxxCompilerVersions: [9]
       platforms: [x64]
       cmakeBuildConfigurations: [Release]
-      tag: 'Release'
 
     - os: Linux
       cxxCompiler: GCC
@@ -74,7 +72,6 @@ jobs:
       cxxCompilerVersions: [9]
       platforms: [x64]
       cmakeBuildConfigurations: [Release]
-      tag: 'Release'
 
     - os: Linux
       cxxCompiler: Clang
@@ -94,7 +91,6 @@ jobs:
       cxxCompilerVersions: [9]
       platforms: [x64]
       cmakeBuildConfigurations: [Release]
-      tag: 'Release'
 
     - os: MacOS
       cxxCompiler: AppleClang
@@ -106,5 +102,3 @@ jobs:
       cxxCompilerVersions: [11]
       platforms: [x64]
       cmakeBuildConfigurations: [Release]
-      tag: 'Release'
-
