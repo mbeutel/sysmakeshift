@@ -102,6 +102,7 @@ TEST_CASE("thread_squad")
         auto threadSquad = sysmakeshift::thread_squad(params);
         for (int i = 0; i < numTasks; ++i)
         {
+            CAPTURE(i);
             threadSquad.run([](auto const&){ });
         }
     }
