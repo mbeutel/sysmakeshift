@@ -728,8 +728,8 @@ struct thread_squad_impl : thread_squad_impl_base
 
     thread_squad_impl(thread_squad::params const& p)
         : thread_squad_impl_base{ p.num_threads },
-          data(*this, p.num_threads),
-          needLaunch(true)
+          needLaunch(true),
+          data(*this, p.num_threads)
     {
 #if defined(_WIN32)
             // Create threads suspended; set core affinity if desired.
@@ -793,7 +793,7 @@ noexcept // We cannot really handle thread launch failure.
         }
 # endif // defined(USE_PTHREAD_SETAFFINITY)
         auto handle = pthread_t{ };
-        detail::posix_check(::pthread_create(&handle, &attr.attr, thread_squad_thread_func, data.thread_context_for(i)));
+        detail::posix_check(::pthread_create(&handle, &attr.attr, thread_squad_thread_func, self.data.thread_context_for(i)));
         self.handles[i] = pthread_handle(handle);
     }
 
