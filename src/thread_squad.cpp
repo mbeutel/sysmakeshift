@@ -373,7 +373,6 @@ T toggle_and_notify(
 {
     T oldValue = a.load(std::memory_order_relaxed);
     T newValue = 1 ^ oldValue;
-    //std::atomic_thread_fence(std::memory_order_release);
     {
         auto lock = std::lock_guard(mutex); // implicit acquire
         a.store(newValue, std::memory_order_release);
@@ -446,7 +445,7 @@ init_range(
         int substride = next_substride(stride);
         for (int i = first; i < last; i += substride)
         {
-            init_range(threadSyncData, i, std::min(i + substride, last), substride);
+            detail::init_range(threadSyncData, i, std::min(i + substride, last), substride);
         }
     }
     threadSyncData[first].numSubthreads = stride;
@@ -461,11 +460,38 @@ init(
     {
         threadSyncData[i].threadIdx = i;
     }
-    init_range(threadSyncData, 0, numThreads, numThreads);
+    detail::init_range(threadSyncData, 0, numThreads, numThreads);
 }
 
 static void
-notify_thread_impl(
+notify_thread(
+    aligned_buffer<thread_sync_data, cache_line_alignment>& threadSyncData,
+    aligned_buffer<thread_notify_data, cache_line_alignment>& threadNotifyData,
+    [[maybe_unused]] int callingThreadIdx, int targetThreadIdx)
+{
+#ifdef DEBUG_WAIT_CHAIN
+    std::printf("notifying: %d -> %d\n", callingThreadIdx, targetThreadIdx);
+    std::fflush(stdout);
+#endif // DEBUG_WAIT_CHAIN
+    detail::toggle_and_notify(threadNotifyData[targetThreadIdx].mutex, threadNotifyData[targetThreadIdx].cv, threadSyncData[targetThreadIdx].newSense);
+}
+
+static void
+wait_for_thread(
+    aligned_buffer<thread_sync_data, cache_line_alignment>& threadSyncData,
+    [[maybe_unused]] int callingThreadIdx, int targetThreadIdx)
+{
+    int newSense = threadSyncData[targetThreadIdx].newSense.load(std::memory_order_relaxed);
+    int oldSense = 1 ^ newSense;
+    detail::atomic_wait_while_equal(threadSyncData[targetThreadIdx].sense, oldSense);
+#ifdef DEBUG_WAIT_CHAIN
+    std::printf("waited: %d <- %d\n", callingThreadIdx, targetThreadIdx);
+    std::fflush(stdout);
+#endif // DEBUG_WAIT_CHAIN
+}
+
+static void
+notify_subthreads_impl(
     aligned_buffer<thread_sync_data, cache_line_alignment>& threadSyncData,
     aligned_buffer<thread_notify_data, cache_line_alignment>& threadNotifyData,
     int first, int last, int stride)
@@ -475,11 +501,7 @@ notify_thread_impl(
         int substride = next_substride(stride);
         for (int i = first + substride; i < last; i += substride)
         {
-#ifdef DEBUG_WAIT_CHAIN
-            std::printf("notifying: %d -> %d\n", first, i);
-            std::fflush(stdout);
-#endif // DEBUG_WAIT_CHAIN
-            toggle_and_notify(threadNotifyData[i].mutex, threadNotifyData[i].cv, threadSyncData[i].newSense);
+            detail::notify_thread(threadSyncData, threadNotifyData, first, i);
         }
         last = std::min(first + substride, last);
         stride = substride;
@@ -487,44 +509,38 @@ notify_thread_impl(
 }
 
 static void
-notify_thread(
+notify_subthreads(
     aligned_buffer<thread_sync_data, cache_line_alignment>& threadSyncData,
     aligned_buffer<thread_notify_data, cache_line_alignment>& threadNotifyData,
     int threadIdx, int concurrency)
 {
     int stride = threadSyncData[threadIdx].numSubthreads;
-    notify_thread_impl(threadSyncData, threadNotifyData, threadIdx, std::min(threadIdx + stride, concurrency), stride);
+    detail::notify_subthreads_impl(threadSyncData, threadNotifyData, threadIdx, std::min(threadIdx + stride, concurrency), stride);
 }
 
 static void
-wait_for_thread_impl(
+wait_for_subthreads_impl(
     aligned_buffer<thread_sync_data, cache_line_alignment>& threadSyncData,
     int first, int last, int stride)
 {
     int substride = next_substride(stride);
     if (stride != 1)
     {
-        wait_for_thread_impl(threadSyncData, first, std::min(first + substride, last), substride);
+        detail::wait_for_subthreads_impl(threadSyncData, first, std::min(first + substride, last), substride);
     }
     for (int i = first + substride; i < last; i += substride)
     {
-        int newSense = threadSyncData[i].newSense.load(std::memory_order_relaxed);
-        int oldSense = 1 ^ newSense;
-        atomic_wait_while_equal(threadSyncData[i].sense, oldSense);
-#ifdef DEBUG_WAIT_CHAIN
-        std::printf("waited: %d <- %d\n", first, i);
-        std::fflush(stdout);
-#endif // DEBUG_WAIT_CHAIN
+        detail::wait_for_thread(threadSyncData, first, i);
     }
 }
 
 static void
-wait_for_thread(
+wait_for_subthreads(
     aligned_buffer<thread_sync_data, cache_line_alignment>& threadSyncData,
     int threadIdx, int concurrency)
 {
     int stride = threadSyncData[threadIdx].numSubthreads;
-    wait_for_thread_impl(threadSyncData, threadIdx, std::min(threadIdx + stride, concurrency), stride);
+    detail::wait_for_subthreads_impl(threadSyncData, threadIdx, std::min(threadIdx + stride, concurrency), stride);
 }
 
 
@@ -635,6 +651,10 @@ noexcept // We cannot really handle thread launch failure.
         // Resume threads.
     for (int i = 0; i < self.numThreads; ++i)
     {
+#ifdef DEBUG_WAIT_CHAIN
+        std::printf("forking %d\n", i);
+        std::fflush(stdout);
+#endif // DEBUG_WAIT_CHAIN
         DWORD result = ::ResumeThread(self.handles[i].get());
         detail::win32_assert(result != DWORD(-1));
     }
@@ -642,6 +662,10 @@ noexcept // We cannot really handle thread launch failure.
         // Create threads; set core affinity if desired.
     for (int i = 0; i < self.numThreads; ++i)
     {
+#ifdef DEBUG_WAIT_CHAIN
+        std::printf("forking %d\n", i);
+        std::fflush(stdout);
+#endif // DEBUG_WAIT_CHAIN
         PThreadAttr attr;
 # if defined(USE_PTHREAD_SETAFFINITY)
         if (self.pinToHardwareThreads)
@@ -681,6 +705,13 @@ noexcept // We cannot really handle join failure.
             lhandles[j] = self.handles[i + j].get();
         }
         DWORD result = ::WaitForMultipleObjects(n, lhandles, TRUE, INFINITE);
+#ifdef DEBUG_WAIT_CHAIN
+        for (int j = 0; j < n; ++j)
+        {
+            std::printf("joining %d\n", i + j);
+            std::fflush(stdout);
+        }
+#endif // DEBUG_WAIT_CHAIN
         detail::win32_assert(result != WAIT_FAILED);
         i += n;
     }
@@ -692,6 +723,10 @@ noexcept // We cannot really handle join failure.
         {
             detail::posix_check(::pthread_join(self.handles[i].get(), NULL));
             self.handles[i].release();
+#ifdef DEBUG_WAIT_CHAIN
+            std::printf("joining %d\n", i);
+            std::fflush(stdout);
+#endif // DEBUG_WAIT_CHAIN
         }
     }
 #else
@@ -719,8 +754,6 @@ noexcept // We cannot really handle exceptions here.
     bool wakeToJoin = join;
 #endif // USE_PTHREAD
 
-    int oldSense = 0;
-
     if ((self.action && concurrency != 0)
         || wakeToJoin)
     {
@@ -730,17 +763,13 @@ noexcept // We cannot really handle exceptions here.
             int numThreadsToWake = join ? self.numThreads : concurrency;
             for (int i = 0; i < numThreadsToWake; ++i)
             {
-                self.threadSyncData[i].newSense.store(1, std::memory_order_relaxed);
+                detail::notify_thread(self.threadSyncData, self.threadNotifyData, -1, i);
             }
             detail::launch_threads(self);
         }
         else
         {
-            oldSense = toggle_and_notify(self.threadNotifyData[0].mutex, self.threadNotifyData[0].cv, self.threadSyncData[0].newSense);
-#ifdef DEBUG_WAIT_CHAIN
-            std::printf("notifying: general -> 0\n");
-            std::fflush(stdout);
-#endif // DEBUG_WAIT_CHAIN
+            detail::notify_thread(self.threadSyncData, self.threadNotifyData, -1, 0);
         }
     }
 
@@ -750,11 +779,7 @@ noexcept // We cannot really handle exceptions here.
     }
     else
     {
-        detail::atomic_wait_while_equal(self.threadSyncData[0].sense, oldSense);
-#ifdef DEBUG_WAIT_CHAIN
-        std::printf("waited: general <- 0\n");
-        std::fflush(stdout);
-#endif // DEBUG_WAIT_CHAIN
+        detail::wait_for_thread(self.threadSyncData, -1, 0);
     }
 }
 
@@ -773,7 +798,7 @@ run_thread(thread_sync_data& syncData, thread_notify_data& notifyData)
     do
     {
         auto oldSense = syncData.sense.load(std::memory_order_relaxed);
-        auto newSense = wait_and_load(notifyData.mutex, notifyData.cv, syncData.newSense, oldSense);
+        auto newSense = detail::wait_and_load(notifyData.mutex, notifyData.cv, syncData.newSense, oldSense);
 
         if (justWoken)
         {
@@ -782,7 +807,7 @@ run_thread(thread_sync_data& syncData, thread_notify_data& notifyData)
         else
         {
             int numThreadsToWake = syncData.impl.terminationRequested ? syncData.impl.numThreads : syncData.impl.concurrency;
-            notify_thread(syncData.impl.threadSyncData, syncData.impl.threadNotifyData, syncData.threadIdx, numThreadsToWake);
+            detail::notify_subthreads(syncData.impl.threadSyncData, syncData.impl.threadNotifyData, syncData.threadIdx, numThreadsToWake);
         }
 
         if (syncData.impl.action && syncData.threadIdx < syncData.impl.concurrency)
@@ -792,7 +817,7 @@ run_thread(thread_sync_data& syncData, thread_notify_data& notifyData)
 
         if (!syncData.impl.terminationRequested)
         {
-            wait_for_thread(syncData.impl.threadSyncData, syncData.threadIdx, syncData.impl.concurrency);
+            detail::wait_for_subthreads(syncData.impl.threadSyncData, syncData.threadIdx, syncData.impl.concurrency);
 #ifdef DEBUG_WAIT_CHAIN
             std::printf("signaling: %d\n", syncData.threadIdx);
             std::fflush(stdout);
