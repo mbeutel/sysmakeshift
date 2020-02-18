@@ -373,6 +373,8 @@ toggle_and_notify(
     std::mutex& mutex, std::condition_variable& cv,
     std::atomic<T>& a)
 {
+    std::atomic_thread_fence(std::memory_order_release);
+
     T oldValue = a.load(std::memory_order_relaxed);
     T newValue = 1 ^ oldValue;
     {
@@ -412,7 +414,7 @@ public:
         }
 
         void
-        notify_subthreads(void) noexcept
+        notify_subthreads([[maybe_unused]] bool justWoken) noexcept
         {
             int numThreadsToWake = threadSquadData_.terminationRequested_ ? gsl::narrow<int>(threadSquadData_.threadData_.size()) : threadSquadData_.concurrency_;
             threadSquadData_.notify_subthreads(threadIdx_, numThreadsToWake);
@@ -656,22 +658,14 @@ run_thread(thread_squad_data::thread_data& threadData)
     {
         threadData.task_wait();
 
-        if (justWoken)
-        {
-            justWoken = false;
-        }
-        else
-        {
-            threadData.notify_subthreads();
-        }
+        threadData.notify_subthreads(justWoken);
+        justWoken = false;
 
         threadData.task_run();
 
-        if (!threadData.termination_requested())
-        {
-            threadData.wait_for_subthreads();
-            threadData.task_signal_completion();
-        }
+        threadData.wait_for_subthreads();
+
+        threadData.task_signal_completion();
     } while (!threadData.termination_requested());
 }
 
@@ -880,28 +874,16 @@ noexcept // We cannot really handle exceptions here.
 
     if (haveWork || wakeToJoin)
     {
-            // No need to notify threads for nothing if none have been launched yet.
+        self.data.notify_thread(-1, 0);
         if (self.needLaunch)
         {
-            int numThreadsToWake = join ? self.numThreads : concurrency;
-            for (int i = 0; i < numThreadsToWake; ++i)
-            {
-                self.data.notify_thread(-1, i);
-            }
             detail::launch_threads(self);
         }
-        else
-        {
-            self.data.notify_thread(-1, 0);
-        }
-    }
 
-    if (join)
-    {
-        detail::join_threads(self);
-    }
-    else
-    {
+        if (join)
+        {
+            detail::join_threads(self);
+        }
         self.data.wait_for_thread(-1, 0);
     }
 }
