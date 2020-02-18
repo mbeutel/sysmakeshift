@@ -10,7 +10,7 @@ cmake_minimum_required(VERSION 3.14)
 find_package(CMakeshift 3.8 REQUIRED)
 find_package(Threads REQUIRED)
 find_package(gsl-lite 0.36 REQUIRED)
-find_package(Catch2 2.9 REQUIRED)
+find_package(Catch2 2.11 REQUIRED)
 
 include(CMakeshift/TargetCompileSettings)
 
