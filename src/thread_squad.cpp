@@ -285,18 +285,15 @@ struct PThreadAttr
 #endif // _WIN32
 
 
-#ifdef _WIN32
-static std::atomic<unsigned> threadSquadCounter{ };
-#endif // _WIN32
-
-
 #if defined(__i386__) || defined(__x86_64__) || defined(_M_IX86) || defined(_M_X64)
-static inline void pause(void)
+static inline void
+pause(void)
 {
     _mm_pause();
 }
 #else
-static inline void pause(void)
+static inline void
+pause(void)
 {
     [[maybe_unused]] volatile int v = 0;
 }
@@ -308,7 +305,8 @@ constexpr int pauseCount = 9;
 constexpr int yieldCount = 6;
 
 template <typename T>
-bool wait_equal_exponential_backoff(std::atomic<T>& a, T oldValue)
+bool
+wait_equal_exponential_backoff(std::atomic<T> const& a, T oldValue)
 {
     if (a.load(std::memory_order_relaxed) != oldValue) return true;
     for (int i = 0; i < (1 << pauseCount); ++i)
@@ -337,7 +335,8 @@ bool wait_equal_exponential_backoff(std::atomic<T>& a, T oldValue)
 }
 
 template <typename T>
-T atomic_wait_while_equal(std::atomic<T>& a, T oldValue)
+T
+atomic_wait_while_equal(std::atomic<T> const& a, T oldValue)
 {
     if (!detail::wait_equal_exponential_backoff(a, oldValue))
     {
@@ -350,7 +349,8 @@ T atomic_wait_while_equal(std::atomic<T>& a, T oldValue)
 }
 
 template <typename T>
-T wait_and_load(
+T
+wait_and_load(
     std::mutex& mutex, std::condition_variable& cv,
     std::atomic<T>& a, T oldValue)
 {
@@ -363,11 +363,13 @@ T wait_and_load(
         }
         // implicit release in destructor of `lock`
     }
+
     return a.load(std::memory_order_acquire);
 }
 
 template <typename T>
-T toggle_and_notify(
+T
+toggle_and_notify(
     std::mutex& mutex, std::condition_variable& cv,
     std::atomic<T>& a)
 {
@@ -382,42 +384,295 @@ T toggle_and_notify(
     return oldValue;
 }
 
-struct thread_notify_data
-{
-    std::mutex mutex;
-    std::condition_variable cv;
-};
 
-struct thread_sync_data
-{
-    std::atomic<int> newSense;
-    std::atomic<int> sense;
-    int threadIdx;
-    int numSubthreads;
-    thread_squad_impl& impl;
+static std::atomic<unsigned> threadSquadCounter{ };
 
-    thread_sync_data(thread_squad_impl& _impl) noexcept
-        : newSense(0),
-          sense(0),
-          numSubthreads(0),
-          impl(_impl)
+
+class thread_squad_data
+{
+public:
+    class thread_data
     {
+        friend thread_squad_data;
+
+private:
+        std::atomic<int> newSense_;
+        std::atomic<int> sense_;
+        int threadIdx_;
+        int numSubthreads_;
+        thread_squad_data& threadSquadData_;
+
+public:
+        thread_data(thread_squad_data& _impl) noexcept
+            : newSense_(0),
+              sense_(0),
+              numSubthreads_(0),
+              threadSquadData_(_impl)
+        {
+        }
+
+        void
+        notify_subthreads(void) noexcept
+        {
+            int numThreadsToWake = threadSquadData_.terminationRequested_ ? gsl::narrow<int>(threadSquadData_.threadData_.size()) : threadSquadData_.concurrency_;
+            threadSquadData_.notify_subthreads(threadIdx_, numThreadsToWake);
+        }
+
+        void
+        wait_for_subthreads(void) noexcept
+        {
+            threadSquadData_.wait_for_subthreads(threadIdx_, threadSquadData_.concurrency_);
+        }
+
+        void
+        task_wait(void) noexcept
+        {
+            auto& notifyData = threadSquadData_.threadNotifyData_[threadIdx_];
+            auto oldSense = sense_.load(std::memory_order_relaxed);
+            detail::wait_and_load(notifyData.mutex, notifyData.cv, newSense_, oldSense);
+#ifdef DEBUG_WAIT_CHAIN
+            std::printf("thread squad #%u, thread %d: started\n", threadSquadData_.threadSquadId_, threadIdx_);
+            std::fflush(stdout);
+#endif // DEBUG_WAIT_CHAIN
+        }
+
+        void
+        task_run(void) const noexcept
+        {
+            if (threadSquadData_.action_ && threadIdx_ < threadSquadData_.concurrency_)
+            {
+                    // Like the parallel overloads of the standard algorithms, we terminate (implicitly) if an exception is thrown
+                    // by a task because the semantics of exceptions in multiplexed actions are unclear.
+                auto localAction = threadSquadData_.action_;
+                localAction(threadSquadData_.make_context_for(threadIdx_));
+            }
+        }
+
+        void
+        task_signal_completion(void) noexcept
+        {
+#ifdef DEBUG_WAIT_CHAIN
+            std::printf("thread squad #%u, thread %d: signaling\n", threadSquadData_.threadSquadId_, threadIdx_);
+            std::fflush(stdout);
+#endif // DEBUG_WAIT_CHAIN
+            sense_.store(newSense_.load(std::memory_order_relaxed), std::memory_order_release);
+        }
+
+        int
+        thread_idx(void) const noexcept
+        {
+            return threadIdx_;
+        }
+
+        unsigned
+        thread_squad_id(void) const noexcept
+        {
+            return threadSquadData_.threadSquadId_;
+        }
+
+        bool
+        termination_requested(void) const noexcept
+        {
+            return threadSquadData_.terminationRequested_;
+        }
+
+        static thread_data& from_thread_context(void* ctx)
+        {
+            gsl_Expects(ctx != nullptr);
+
+            return *static_cast<thread_data*>(ctx);
+        }
+    };
+
+
+private:
+    struct thread_notify_data
+    {
+        std::mutex mutex;
+        std::condition_variable cv;
+    };
+
+
+        // context data
+    thread_squad_impl_base& impl_;
+
+        // synchronization data
+    aligned_buffer<thread_notify_data, cache_line_alignment> threadNotifyData_;
+    aligned_buffer<thread_data, cache_line_alignment> threadData_;
+
+        // task-specific data
+    std::function<void(thread_squad::task_context)> action_;
+    int concurrency_;
+    bool terminationRequested_;
+
+        // debugging data
+    unsigned threadSquadId_; // for runtime thread identification during debugging
+
+
+    thread_squad::task_context
+    make_context_for(int threadIdx) noexcept
+    {
+        return { impl_, threadIdx };
+    }
+
+    static int
+    next_substride(int stride)
+    {
+        return (stride + 7) / 8;
+        /*if (stride % 3 == 0)
+        {
+            return stride /= 3;
+        }
+        if (stride % 2 == 0)
+        {
+            return stride /= 2;
+        }
+        return (stride + 1) / 2;*/
+    }
+
+    void
+    init(int first, int last, int stride)
+    {
+        if (stride != 1)
+        {
+            int substride = next_substride(stride);
+            for (int i = first; i < last; i += substride)
+            {
+                init(i, std::min(i + substride, last), substride);
+            }
+        }
+        threadData_[first].numSubthreads_ = stride;
+    }
+
+    void
+    notify_subthreads_impl(int first, int last, int stride)
+    {
+        while (stride != 1)
+        {
+            int substride = next_substride(stride);
+            for (int i = first + substride; i < last; i += substride)
+            {
+                notify_thread(first, i);
+            }
+            last = std::min(first + substride, last);
+            stride = substride;
+        }
+    }
+
+    void
+    wait_for_subthreads_impl(int first, int last, int stride)
+    const
+    {
+        int substride = next_substride(stride);
+        if (stride != 1)
+        {
+            wait_for_subthreads_impl(first, std::min(first + substride, last), substride);
+        }
+        for (int i = first + substride; i < last; i += substride)
+        {
+            wait_for_thread(first, i);
+        }
+    }
+
+public:
+    thread_squad_data(thread_squad_impl_base& _impl, int numThreads)
+        : impl_(_impl),
+          threadNotifyData_(gsl::narrow<std::size_t>(numThreads)),
+          threadData_(gsl::narrow<std::size_t>(numThreads), std::in_place, *this),
+          threadSquadId_(threadSquadCounter.fetch_add(1, std::memory_order_acq_rel))
+    {
+        for (int i = 0; i < numThreads; ++i)
+        {
+            threadData_[i].threadIdx_ = i;
+        }
+        init(0, numThreads, numThreads);
+    }
+
+    void notify_thread([[maybe_unused]] int callingThreadIdx, int targetThreadIdx)
+    {
+    #ifdef DEBUG_WAIT_CHAIN
+        std::printf("thread squad #%u, thread %d: notifying %d\n", threadSquadId_, callingThreadIdx, targetThreadIdx);
+        std::fflush(stdout);
+    #endif // DEBUG_WAIT_CHAIN
+        detail::toggle_and_notify(threadNotifyData_[targetThreadIdx].mutex, threadNotifyData_[targetThreadIdx].cv, threadData_[targetThreadIdx].newSense_);
+    }
+
+    void
+    wait_for_thread([[maybe_unused]] int callingThreadIdx, int targetThreadIdx)
+    const
+    {
+        int newSense_ = threadData_[targetThreadIdx].newSense_.load(std::memory_order_relaxed);
+        int oldSense = 1 ^ newSense_;
+        detail::atomic_wait_while_equal(threadData_[targetThreadIdx].sense_, oldSense);
+    #ifdef DEBUG_WAIT_CHAIN
+        std::printf("thread squad #%u, thread %d: awaited %d\n", threadSquadId_, callingThreadIdx, targetThreadIdx);
+        std::fflush(stdout);
+    #endif // DEBUG_WAIT_CHAIN
+    }
+
+    void
+    notify_subthreads(int callingThreadIdx, int _concurrency)
+    {
+        int stride = threadData_[callingThreadIdx].numSubthreads_;
+        notify_subthreads_impl(callingThreadIdx, std::min(callingThreadIdx + stride, _concurrency), stride);
+    }
+
+    void
+    wait_for_subthreads(int callingThreadIdx, int _concurrency)
+    const
+    {
+        int stride = threadData_[callingThreadIdx].numSubthreads_;
+        wait_for_subthreads_impl(callingThreadIdx, std::min(callingThreadIdx + stride, _concurrency), stride);
+    }
+
+    void
+    store_task(std::function<void(thread_squad::task_context)> _action, int _concurrency, bool _join)
+    noexcept // We cannot really handle exceptions here.
+    {
+        gsl_Expects(_action || _join);
+
+        terminationRequested_ = _join;
+        concurrency_ = _concurrency;
+        action_ = std::move(_action);
+    }
+
+    unsigned
+    id(void) const noexcept
+    {
+        return threadSquadId_;
+    }
+
+    void* thread_context_for(int threadIdx_)
+    {
+        return &threadData_[threadIdx_];
     }
 };
 
-static int
-next_substride(int stride)
+static void
+run_thread(thread_squad_data::thread_data& threadData)
 {
-    return (stride + 7) / 8;
-    /*if (stride % 3 == 0)
+    bool justWoken = true;
+    do
     {
-        return stride /= 3;
-    }
-    if (stride % 2 == 0)
-    {
-        return stride /= 2;
-    }
-    return (stride + 1) / 2;*/
+        threadData.task_wait();
+
+        if (justWoken)
+        {
+            justWoken = false;
+        }
+        else
+        {
+            threadData.notify_subthreads();
+        }
+
+        threadData.task_run();
+
+        if (!threadData.termination_requested())
+        {
+            threadData.wait_for_subthreads();
+            threadData.task_signal_completion();
+        }
+    } while (!threadData.termination_requested());
 }
 
 
@@ -433,115 +688,6 @@ next_substride(int stride)
 //
 //      Subthread counts:   9 1 1 3 1 1 3 1 1     8 1 2 1 4 1 2 1     8 1 2 1 4 1 2     6 1 1 3 1 1
 //
-
-
-static void
-init_range(
-    aligned_buffer<thread_sync_data, cache_line_alignment>& threadSyncData,
-    int first, int last, int stride)
-{
-    if (stride != 1)
-    {
-        int substride = next_substride(stride);
-        for (int i = first; i < last; i += substride)
-        {
-            detail::init_range(threadSyncData, i, std::min(i + substride, last), substride);
-        }
-    }
-    threadSyncData[first].numSubthreads = stride;
-}
-
-static void
-init(
-    aligned_buffer<thread_sync_data, cache_line_alignment>& threadSyncData)
-{
-    int numThreads = gsl::narrow<int>(threadSyncData.size());
-    for (int i = 0; i < numThreads; ++i)
-    {
-        threadSyncData[i].threadIdx = i;
-    }
-    detail::init_range(threadSyncData, 0, numThreads, numThreads);
-}
-
-static void
-notify_thread(
-    aligned_buffer<thread_sync_data, cache_line_alignment>& threadSyncData,
-    aligned_buffer<thread_notify_data, cache_line_alignment>& threadNotifyData,
-    [[maybe_unused]] int callingThreadIdx, int targetThreadIdx)
-{
-#ifdef DEBUG_WAIT_CHAIN
-    std::printf("notifying: %d -> %d\n", callingThreadIdx, targetThreadIdx);
-    std::fflush(stdout);
-#endif // DEBUG_WAIT_CHAIN
-    detail::toggle_and_notify(threadNotifyData[targetThreadIdx].mutex, threadNotifyData[targetThreadIdx].cv, threadSyncData[targetThreadIdx].newSense);
-}
-
-static void
-wait_for_thread(
-    aligned_buffer<thread_sync_data, cache_line_alignment>& threadSyncData,
-    [[maybe_unused]] int callingThreadIdx, int targetThreadIdx)
-{
-    int newSense = threadSyncData[targetThreadIdx].newSense.load(std::memory_order_relaxed);
-    int oldSense = 1 ^ newSense;
-    detail::atomic_wait_while_equal(threadSyncData[targetThreadIdx].sense, oldSense);
-#ifdef DEBUG_WAIT_CHAIN
-    std::printf("waited: %d <- %d\n", callingThreadIdx, targetThreadIdx);
-    std::fflush(stdout);
-#endif // DEBUG_WAIT_CHAIN
-}
-
-static void
-notify_subthreads_impl(
-    aligned_buffer<thread_sync_data, cache_line_alignment>& threadSyncData,
-    aligned_buffer<thread_notify_data, cache_line_alignment>& threadNotifyData,
-    int first, int last, int stride)
-{
-    while (stride != 1)
-    {
-        int substride = next_substride(stride);
-        for (int i = first + substride; i < last; i += substride)
-        {
-            detail::notify_thread(threadSyncData, threadNotifyData, first, i);
-        }
-        last = std::min(first + substride, last);
-        stride = substride;
-    }
-}
-
-static void
-notify_subthreads(
-    aligned_buffer<thread_sync_data, cache_line_alignment>& threadSyncData,
-    aligned_buffer<thread_notify_data, cache_line_alignment>& threadNotifyData,
-    int threadIdx, int concurrency)
-{
-    int stride = threadSyncData[threadIdx].numSubthreads;
-    detail::notify_subthreads_impl(threadSyncData, threadNotifyData, threadIdx, std::min(threadIdx + stride, concurrency), stride);
-}
-
-static void
-wait_for_subthreads_impl(
-    aligned_buffer<thread_sync_data, cache_line_alignment>& threadSyncData,
-    int first, int last, int stride)
-{
-    int substride = next_substride(stride);
-    if (stride != 1)
-    {
-        detail::wait_for_subthreads_impl(threadSyncData, first, std::min(first + substride, last), substride);
-    }
-    for (int i = first + substride; i < last; i += substride)
-    {
-        detail::wait_for_thread(threadSyncData, first, i);
-    }
-}
-
-static void
-wait_for_subthreads(
-    aligned_buffer<thread_sync_data, cache_line_alignment>& threadSyncData,
-    int threadIdx, int concurrency)
-{
-    int stride = threadSyncData[threadIdx].numSubthreads;
-    detail::wait_for_subthreads_impl(threadSyncData, threadIdx, std::min(threadIdx + stride, concurrency), stride);
-}
 
 
 #ifdef THREAD_PINNING_SUPPORTED
@@ -577,18 +723,6 @@ struct thread_squad_impl : thread_squad_impl_base
 # error Unsupported operating system.
 #endif // _WIN32
 
-        // synchronization data
-    aligned_buffer<thread_notify_data, cache_line_alignment> threadNotifyData;
-    aligned_buffer<thread_sync_data, cache_line_alignment> threadSyncData;
-
-        // task-specific data
-    std::function<void(thread_squad::task_context)> action;
-    int concurrency;
-    bool terminationRequested;
-
-#ifdef _WIN32
-    unsigned threadSquadId; // for runtime thread identification during debugging
-#endif // _WIN32
     bool needLaunch;
 #ifdef USE_PTHREAD_SETAFFINITY
     bool pinToHardwareThreads;
@@ -596,17 +730,13 @@ struct thread_squad_impl : thread_squad_impl_base
     std::vector<int> hardwareThreadMappings;
 #endif // USE_PTHREAD_SETAFFINITY
 
+    thread_squad_data data;
+
     thread_squad_impl(thread_squad::params const& p)
         : thread_squad_impl_base{ p.num_threads },
-          threadNotifyData(gsl::narrow<std::size_t>(p.num_threads)),
-          threadSyncData(gsl::narrow<std::size_t>(p.num_threads), std::in_place, *this),
-#ifdef _WIN32
-          threadSquadId(threadSquadCounter++),
-#endif // _WIN32
+          data(*this, p.num_threads),
           needLaunch(true)
     {
-        init(threadSyncData);
-
 #if defined(_WIN32)
             // Create threads suspended; set core affinity if desired.
         handles = std::make_unique<detail::win32_handle[]>(gsl::narrow<std::size_t>(p.num_threads));
@@ -614,7 +744,7 @@ struct thread_squad_impl : thread_squad_impl_base
         for (int i = 0; i < p.num_threads; ++i)
         {
             auto handle = detail::win32_handle(
-                (HANDLE) ::_beginthreadex(NULL, 0, thread_squad_thread_func, &threadSyncData[i], threadCreationFlags, nullptr));
+                (HANDLE) ::_beginthreadex(NULL, 0, thread_squad_thread_func, data.thread_context_for(i), threadCreationFlags, nullptr));
             detail::win32_assert(handle != nullptr);
             if (p.pin_to_hardware_threads)
             {
@@ -632,11 +762,6 @@ struct thread_squad_impl : thread_squad_impl_base
         handles = std::make_unique<detail::pthread_handle[]>(gsl::narrow<std::size_t>(p.num_threads));
 #endif // USE_PTHREAD
     }
-
-    thread_squad::task_context make_context(int threadIdx) noexcept
-    {
-        return { *this, threadIdx };
-    }
 };
 
 
@@ -652,7 +777,7 @@ noexcept // We cannot really handle thread launch failure.
     for (int i = 0; i < self.numThreads; ++i)
     {
 #ifdef DEBUG_WAIT_CHAIN
-        std::printf("forking %d\n", i);
+        std::printf("thread squad #%u, thread -1: forking %d\n", self.data.id(), i);
         std::fflush(stdout);
 #endif // DEBUG_WAIT_CHAIN
         DWORD result = ::ResumeThread(self.handles[i].get());
@@ -663,7 +788,7 @@ noexcept // We cannot really handle thread launch failure.
     for (int i = 0; i < self.numThreads; ++i)
     {
 #ifdef DEBUG_WAIT_CHAIN
-        std::printf("forking %d\n", i);
+        std::printf("thread squad #%u, thread -1: forking %d\n", self.data.id(), i);
         std::fflush(stdout);
 #endif // DEBUG_WAIT_CHAIN
         PThreadAttr attr;
@@ -674,7 +799,7 @@ noexcept // We cannot really handle thread launch failure.
         }
 # endif // defined(USE_PTHREAD_SETAFFINITY)
         auto handle = pthread_t{ };
-        detail::posix_check(::pthread_create(&handle, &attr.attr, thread_squad_thread_func, &self.threadSyncData[i]));
+        detail::posix_check(::pthread_create(&handle, &attr.attr, thread_squad_thread_func, data.thread_context_for(i)));
         self.handles[i] = pthread_handle(handle);
     }
 
@@ -708,7 +833,7 @@ noexcept // We cannot really handle join failure.
 #ifdef DEBUG_WAIT_CHAIN
         for (int j = 0; j < n; ++j)
         {
-            std::printf("joining %d\n", i + j);
+            std::printf("thread squad #%u, thread -1: joined %d\n", self.data.id(), i + j);
             std::fflush(stdout);
         }
 #endif // DEBUG_WAIT_CHAIN
@@ -724,7 +849,7 @@ noexcept // We cannot really handle join failure.
             detail::posix_check(::pthread_join(self.handles[i].get(), NULL));
             self.handles[i].release();
 #ifdef DEBUG_WAIT_CHAIN
-            std::printf("joining %d\n", i);
+            std::printf("thread squad #%u, thread -1: joined %d\n", self.data.id(), i);
             std::fflush(stdout);
 #endif // DEBUG_WAIT_CHAIN
         }
@@ -743,9 +868,8 @@ noexcept // We cannot really handle exceptions here.
 {
     gsl_Expects(action || join);
 
-    self.terminationRequested = join;
-    self.concurrency = concurrency;
-    self.action = std::move(action);
+    bool haveWork = action && concurrency != 0;
+    self.data.store_task(std::move(action), concurrency, join);
 
 #ifdef USE_PTHREAD
     bool wakeToJoin = join && !self.needLaunch;
@@ -754,8 +878,7 @@ noexcept // We cannot really handle exceptions here.
     bool wakeToJoin = join;
 #endif // USE_PTHREAD
 
-    if ((self.action && concurrency != 0)
-        || wakeToJoin)
+    if (haveWork || wakeToJoin)
     {
             // No need to notify threads for nothing if none have been launched yet.
         if (self.needLaunch)
@@ -763,13 +886,13 @@ noexcept // We cannot really handle exceptions here.
             int numThreadsToWake = join ? self.numThreads : concurrency;
             for (int i = 0; i < numThreadsToWake; ++i)
             {
-                detail::notify_thread(self.threadSyncData, self.threadNotifyData, -1, i);
+                self.data.notify_thread(-1, i);
             }
             detail::launch_threads(self);
         }
         else
         {
-            detail::notify_thread(self.threadSyncData, self.threadNotifyData, -1, 0);
+            self.data.notify_thread(-1, 0);
         }
     }
 
@@ -779,78 +902,33 @@ noexcept // We cannot really handle exceptions here.
     }
     else
     {
-        detail::wait_for_thread(self.threadSyncData, -1, 0);
+        self.data.wait_for_thread(-1, 0);
     }
-}
-
-    // Like the parallel overloads of the standard algorithms, we terminate (implicitly) if an exception is thrown
-    // by a task because the semantics of exceptions in multiplexed actions are unclear.
-static void
-run_task_on_thread(std::function<void(thread_squad::task_context)> action, thread_squad::task_context arg) noexcept
-{
-    action(arg);
-}
-
-static void
-run_thread(thread_sync_data& syncData, thread_notify_data& notifyData)
-{
-    bool justWoken = true;
-    do
-    {
-        auto oldSense = syncData.sense.load(std::memory_order_relaxed);
-        auto newSense = detail::wait_and_load(notifyData.mutex, notifyData.cv, syncData.newSense, oldSense);
-
-        if (justWoken)
-        {
-            justWoken = false;
-        }
-        else
-        {
-            int numThreadsToWake = syncData.impl.terminationRequested ? syncData.impl.numThreads : syncData.impl.concurrency;
-            detail::notify_subthreads(syncData.impl.threadSyncData, syncData.impl.threadNotifyData, syncData.threadIdx, numThreadsToWake);
-        }
-
-        if (syncData.impl.action && syncData.threadIdx < syncData.impl.concurrency)
-        {
-            detail::run_task_on_thread(syncData.impl.action, syncData.impl.make_context(syncData.threadIdx));
-        }
-
-        if (!syncData.impl.terminationRequested)
-        {
-            detail::wait_for_subthreads(syncData.impl.threadSyncData, syncData.threadIdx, syncData.impl.concurrency);
-#ifdef DEBUG_WAIT_CHAIN
-            std::printf("signaling: %d\n", syncData.threadIdx);
-            std::fflush(stdout);
-#endif // DEBUG_WAIT_CHAIN
-            syncData.sense.store(newSense, std::memory_order_release);
-        }
-
-    } while (!syncData.impl.terminationRequested);
 }
 
 #if defined(_WIN32)
 static unsigned __stdcall
-thread_squad_thread_func(void* vdata)
+thread_squad_thread_func(void* ctx)
 {
-    thread_sync_data& data = *static_cast<thread_sync_data*>(vdata);
+    auto& threadData = thread_squad_data::thread_data::from_thread_context(ctx);
     {
         wchar_t buf[64];
-        std::swprintf(buf, sizeof buf / sizeof(wchar_t), L"sysmakeshift thread squad #%u, thread %d", // TODO: %u?
-            data.impl.threadSquadId, data.threadIdx);
+        std::swprintf(buf, sizeof buf / sizeof(wchar_t), L"sysmakeshift thread squad #%u, thread %d",
+            threadData.thread_squad_id(), threadData.thread_idx());
         detail::setCurrentThreadDescription(buf);
     }
 
-    detail::run_thread(data, data.impl.threadNotifyData[data.threadIdx]);
+    detail::run_thread(threadData);
 
     return 0;
 }
 #elif defined(USE_PTHREAD)
 static void*
-thread_squad_thread_func(void* vdata)
+thread_squad_thread_func(void* ctx)
 {
-    thread_sync_data& data = *static_cast<thread_sync_data*>(vdata);
+    auto& threadData = thread_squad_data::thread_data::from_thread_context(ctx);
 
-    detail::run_thread(data, data.impl.threadNotifyData[data.threadIdx]);
+    detail::run_thread(threadData);
 
     return nullptr;
 }
