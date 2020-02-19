@@ -186,7 +186,7 @@ setThreadAffinity(std::thread::native_handle_type handle, std::size_t coreIdx)
 # endif
 }
 
-/*#ifdef USE_PTHREAD_SETAFFINITY
+#ifdef USE_PTHREAD_SETAFFINITY
 static void
 setThreadAttrAffinity(pthread_attr_t& attr, std::size_t coreIdx)
 {
@@ -194,7 +194,7 @@ setThreadAttrAffinity(pthread_attr_t& attr, std::size_t coreIdx)
     cpuSet.set_cpu_flag(coreIdx);
     detail::posix_check(::pthread_attr_setaffinity_np(&attr, cpuSet.size(), cpuSet.data()));
 }
-#endif // USE_PTHREAD_SETAFFINITY*/
+#endif // USE_PTHREAD_SETAFFINITY
 
 
 #if defined(_WIN32)
@@ -434,17 +434,6 @@ public:
     }
 
     void
-    enforce_core_affinity(void)
-    {
-# ifdef USE_PTHREAD_SETAFFINITY
-        if (coreAffinity_ != std::size_t(-1))
-        {
-            detail::setThreadAffinity(::pthread_self(), coreAffinity_);
-        }
-# endif // USE_PTHREAD_SETAFFINITY
-    }
-
-    void
     fork(thread_proc proc, void* ctx)
     {
         gsl_Expects(!is_running());
@@ -460,8 +449,15 @@ public:
             detail::win32_assert(result != DWORD(-1));
         }
 #elif defined(USE_PTHREAD)
+        PThreadAttr attr;
+# ifdef USE_PTHREAD_SETAFFINITY
+        if (coreAffinity_ != std::size_t(-1))
+        {
+            detail::setThreadAttrAffinity(attr.attr, coreAffinity_);
+        }
+# endif // USE_PTHREAD_SETAFFINITY
         auto lhandle = pthread_t{ };
-        detail::posix_check(::pthread_create(&lhandle, NULL, proc, ctx));
+        detail::posix_check(::pthread_create(&lhandle, &attr.attr, proc, ctx));
         handle_ = pthread_handle(lhandle);
 #else
 # error Unsupported operating system
@@ -561,14 +557,6 @@ public:
                 ? threadSquad_.numThreads
                 : threadSquad_.concurrency_;
             threadSquad_.notify_subthreads(threadIdx_, numThreadsToWake);
-
-            if (justWoken)
-            {
-                    // This must be done *after* creating subthreads because of a quirk in `pthread_create()`: the new thread
-                    // inherits the affinity mask of the calling thread, and apparently the inherited affinity mask takes
-                    // precedence over one supplied in the `attr` argument if the two masks are disjoint.
-                osThread_.enforce_core_affinity();
-            }
         }
 
         void
@@ -611,7 +599,9 @@ public:
             std::printf("thread squad #%u, thread %d: signaling\n", threadSquad_.threadSquadId_, threadIdx_);
             std::fflush(stdout);
 #endif // DEBUG_WAIT_CHAIN
-            sense_.store(newSense_.load(std::memory_order_relaxed), std::memory_order_release);
+            auto& notifyData = threadSquad_.threadNotifyData_[threadIdx_];
+            detail::toggle_and_notify(notifyData.mutex, notifyData.cv, sense_);
+            //sense_.store(newSense_.load(std::memory_order_relaxed), std::memory_order_release);
         }
 
         int
@@ -809,7 +799,8 @@ public:
 
         int newSense_ = threadData_[targetThreadIdx].newSense_.load(std::memory_order_relaxed);
         int oldSense = 1 ^ newSense_;
-        detail::atomic_wait_while_equal(threadData_[targetThreadIdx].sense_, oldSense, spinWait);
+        //detail::atomic_wait_while_equal(threadData_[targetThreadIdx].sense_, oldSense, spinWait);
+        detail::wait_and_load(threadNotifyData_[targetThreadIdx].mutex, threadNotifyData_[targetThreadIdx].cv, threadData_[targetThreadIdx].sense_, oldSense);
     #ifdef DEBUG_WAIT_CHAIN
         std::printf("thread squad #%u, thread %d: awaited %d\n", threadSquadId_, callingThreadIdx, targetThreadIdx);
         std::fflush(stdout);
