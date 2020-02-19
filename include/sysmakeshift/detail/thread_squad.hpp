@@ -15,9 +15,7 @@ struct thread_squad_impl_base
 {
     int numThreads;
 };
-struct thread_squad_impl;
-
-class thread_squad_data;
+class thread_squad_impl;
 
 struct thread_squad_impl_deleter
 {
