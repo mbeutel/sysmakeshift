@@ -65,7 +65,7 @@ public:
         //
     class task_context
     {
-        friend detail::thread_squad_impl;
+        friend detail::thread_squad_data;
 
     private:
         detail::thread_squad_impl_base& impl_;

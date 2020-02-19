@@ -94,7 +94,7 @@ TEST_CASE("thread_squad")
 
     SECTION("no deadlocks")
     {
-        GENERATE(range(0, 10)); // more repetitions
+        GENERATE(range(0, 3)); // more repetitions
 
         int numTasks = GENERATE(0, 1, 2, 5, 10, 20);
         CAPTURE(numTasks);
@@ -102,6 +102,7 @@ TEST_CASE("thread_squad")
         auto threadSquad = sysmakeshift::thread_squad(params);
         for (int i = 0; i < numTasks; ++i)
         {
+            CAPTURE(i);
             threadSquad.run([](auto const&){ });
         }
     }

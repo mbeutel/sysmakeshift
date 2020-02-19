@@ -17,6 +17,8 @@ struct thread_squad_impl_base
 };
 struct thread_squad_impl;
 
+class thread_squad_data;
+
 struct thread_squad_impl_deleter
 {
     void
