@@ -410,7 +410,7 @@ private:
     std::size_t coreAffinity_;
 
 public:
-    constexpr os_thread(void)
+    os_thread(void)
         : coreAffinity_(std::size_t(-1))
     {
     }
@@ -460,7 +460,7 @@ public:
 # endif // USE_PTHREAD_SETAFFINITY
         auto lhandle = pthread_t{ };
         detail::posix_check(::pthread_create(&lhandle, &attr.attr, proc, ctx));
-        handle_ = pthread_handle(handle);
+        handle_ = pthread_handle(lhandle);
 #else
 # error Unsupported operating system
 #endif
@@ -745,6 +745,11 @@ public:
         {
             for (int i = 0; i < numThreads; ++i)
             {
+    #ifdef DEBUG_WAIT_CHAIN
+                std::printf("thread squad #%u, thread -1: pin %d to CPU %d\n", threadSquadId_, i,
+                    int(detail::get_hardware_thread_id(i, params.max_num_hardware_threads, params.hardware_thread_mappings)));
+                std::fflush(stdout);
+    #endif // DEBUG_WAIT_CHAIN
                 threadData_[i].osThread_.set_core_affinity(
                     detail::get_hardware_thread_id(i, params.max_num_hardware_threads, params.hardware_thread_mappings));
             }
