@@ -168,7 +168,6 @@ public:
 
 #endif // _WIN32
 
-#ifdef _WIN32 // currently not needed on non-Windows platforms, so avoid defining it to suppress "unused function" warning
 static void
 setThreadAffinity(std::thread::native_handle_type handle, std::size_t coreIdx)
 {
@@ -186,9 +185,8 @@ setThreadAffinity(std::thread::native_handle_type handle, std::size_t coreIdx)
 #  error Unsupported operating system.
 # endif
 }
-#endif // _WIN32
 
-#ifdef USE_PTHREAD_SETAFFINITY
+/*#ifdef USE_PTHREAD_SETAFFINITY
 static void
 setThreadAttrAffinity(pthread_attr_t& attr, std::size_t coreIdx)
 {
@@ -196,7 +194,7 @@ setThreadAttrAffinity(pthread_attr_t& attr, std::size_t coreIdx)
     cpuSet.set_cpu_flag(coreIdx);
     detail::posix_check(::pthread_attr_setaffinity_np(&attr, cpuSet.size(), cpuSet.data()));
 }
-#endif // USE_PTHREAD_SETAFFINITY
+#endif // USE_PTHREAD_SETAFFINITY*/
 
 
 #if defined(_WIN32)
@@ -436,6 +434,17 @@ public:
     }
 
     void
+    enforce_core_affinity(void)
+    {
+# ifdef USE_PTHREAD_SETAFFINITY
+        if (coreAffinity_ != std::size_t(-1))
+        {
+            detail::setThreadAffinity(handle_.get(), codeAffinity_);
+        }
+# endif // USE_PTHREAD_SETAFFINITY
+    }
+
+    void
     fork(thread_proc proc, void* ctx)
     {
         gsl_Expects(!is_running());
@@ -451,15 +460,8 @@ public:
             detail::win32_assert(result != DWORD(-1));
         }
 #elif defined(USE_PTHREAD)
-        PThreadAttr attr;
-# ifdef USE_PTHREAD_SETAFFINITY
-        if (coreAffinity_ != std::size_t(-1))
-        {
-            detail::setThreadAttrAffinity(attr.attr, coreAffinity_);
-        }
-# endif // USE_PTHREAD_SETAFFINITY
         auto lhandle = pthread_t{ };
-        detail::posix_check(::pthread_create(&lhandle, &attr.attr, proc, ctx));
+        detail::posix_check(::pthread_create(&lhandle, NULL, proc, ctx));
         handle_ = pthread_handle(lhandle);
 #else
 # error Unsupported operating system
@@ -559,6 +561,14 @@ public:
                 ? threadSquad_.numThreads
                 : threadSquad_.concurrency_;
             threadSquad_.notify_subthreads(threadIdx_, numThreadsToWake);
+
+            if (justWoken)
+            {
+                    // This must be done *after* creating subthreads because of a quirk in `pthread_create()`: the new thread
+                    // inherits the affinity mask of the calling thread, and apparently the inherited affinity mask takes
+                    // precedence over one supplied in the `attr` argument if the two masks are disjoint.
+                osThread_.enforce_core_affinity();
+            }
         }
 
         void
