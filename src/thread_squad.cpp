@@ -933,10 +933,23 @@ thread_squad_thread_func(void* ctx)
 {
     auto& threadData = thread_squad_impl::thread_data::from_thread_context(ctx);
     {
-        char buf[64];
-        std::sprintf(buf, "sysmakeshift thread squad #%u, thread %d",
+#if defined(__linux__)
+        char buf[64] { };
+        std::sprintf(buf, "#%u %d",
             threadData.thread_squad_id(), threadData.thread_idx());
-        ::pthread_setname_np(::pthread_self(), buf);
+        if (buf[15] != '\0')
+        {
+                // pthread on Linux restricts the thread name to 16 characters. (It will also reuse the
+                // remainder of the previous name if we don't overwrite all 16 characters.)
+            buf[12] = '.'; buf[13] = '.'; buf[14] = '.'; buf[15] = '\0';
+        }
+        detail::posix_check(::pthread_setname_np(::pthread_self(), buf));
+#elif defined(__APPLE__)
+        char buf[64];
+        std::sprintf(buf, L"sysmakeshift thread squad #%u, thread %d",
+            threadData.thread_squad_id(), threadData.thread_idx());
+        detail::posix_check(::pthread_setname_np(buf));
+#endif
     }
 
     detail::run_thread(threadData);
