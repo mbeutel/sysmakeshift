@@ -28,7 +28,6 @@ TEST_CASE("thread_squad")
     {
         numActualThreads = std::thread::hardware_concurrency();
     }
-    unsigned numHardwareThreadsUsed = std::min(numActualThreads, std::thread::hardware_concurrency());
 
     std::mutex mutex;
     auto threadId_Count = std::unordered_map<std::thread::id, int>{ };
@@ -54,10 +53,6 @@ TEST_CASE("thread_squad")
     SECTION("single task")
     {
         sysmakeshift::thread_squad(params).run(action);
-        if (params.pin_to_hardware_threads)
-        {
-            CHECK(threadId_Count.size() == static_cast<std::size_t>(numHardwareThreadsUsed));
-        }
         CHECK(threadIndex_Count.size() == static_cast<std::size_t>(numActualThreads));
     }
 
@@ -76,7 +71,7 @@ TEST_CASE("thread_squad")
         {
             if (params.pin_to_hardware_threads)
             {
-                CHECK(threadId_Count.size() == static_cast<std::size_t>(numHardwareThreadsUsed));
+                CHECK(threadId_Count.size() == static_cast<std::size_t>(numActualThreads));
             }
             CHECK(threadIndex_Count.size() == static_cast<std::size_t>(numActualThreads));
         }

@@ -439,7 +439,7 @@ public:
 # ifdef USE_PTHREAD_SETAFFINITY
         if (coreAffinity_ != std::size_t(-1))
         {
-            detail::setThreadAffinity(handle_.get(), codeAffinity_);
+            detail::setThreadAffinity(::pthread_self(), coreAffinity_);
         }
 # endif // USE_PTHREAD_SETAFFINITY
     }
@@ -932,6 +932,12 @@ static void*
 thread_squad_thread_func(void* ctx)
 {
     auto& threadData = thread_squad_impl::thread_data::from_thread_context(ctx);
+    {
+        char buf[64];
+        std::sprintf(buf, "sysmakeshift thread squad #%u, thread %d",
+            threadData.thread_squad_id(), threadData.thread_idx());
+        ::pthread_setname_np(::pthread_self(), buf);
+    }
 
     detail::run_thread(threadData);
 
