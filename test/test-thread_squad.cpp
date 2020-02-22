@@ -104,7 +104,7 @@ TEST_CASE("thread_squad")
         }
     }
 
-    SECTION("fixed number of tasks")
+    SECTION("varying concurrency")
     {
         auto threadSquad = sysmakeshift::thread_squad(params);
         for (int i = 1; i <= int(numActualThreads); ++i)

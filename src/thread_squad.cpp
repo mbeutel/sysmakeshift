@@ -2,6 +2,9 @@
 //#define DEBUG_WAIT_CHAIN
 #ifdef DEBUG_WAIT_CHAIN
 # include <cstdio>
+# define THREAD_SQUAD_DBG(...) std::printf(__VA_ARGS__); std::fflush(stdout)
+#else // DEBUG_WAIT_CHAIN
+# define THREAD_SQUAD_DBG(...)
 #endif // DEBUG_WAIT_CHAIN
 
 #include <string>
@@ -529,77 +532,84 @@ static std::atomic<unsigned> threadSquadCounter{ };
 class thread_squad_impl : public thread_squad_impl_base
 {
 public:
+    struct task
+    {
+        std::function<void(thread_squad::task_context)> action;
+        int concurrency;
+        bool terminationRequested;
+    };
+
     class thread_data
     {
         friend thread_squad_impl;
 
     private:
-        std::atomic<int> newSense_;
-        std::atomic<int> sense_;
+            // structure
+        thread_squad_impl& threadSquad_;
         int threadIdx_;
         int numSubthreads_;
-        thread_squad_impl& threadSquad_;
+
+            // resources
         os_thread osThread_;
+
+            // synchronization data
+        std::atomic<int> newSense_;
+        std::atomic<int> sense_;
 
     public:
         thread_data(thread_squad_impl& _impl) noexcept
-            : newSense_(0),
-              sense_(0),
-              numSubthreads_(0),
-              threadSquad_(_impl)
+            : threadSquad_(_impl),
+              newSense_(0),
+              sense_(0)
         {
         }
 
         void
-        notify_subthreads([[maybe_unused]] bool justWoken) noexcept
+        notify_subthreads(int mySense) noexcept
         {
-            int numThreadsToWake = threadSquad_.terminationRequested_
+            int numThreadsToWake = threadSquad_.task_.terminationRequested
                 ? threadSquad_.numThreads
-                : threadSquad_.concurrency_;
-            threadSquad_.notify_subthreads(threadIdx_, numThreadsToWake);
+                : threadSquad_.task_.concurrency;
+            threadSquad_.notify_subthreads(mySense, threadIdx_, numThreadsToWake);
         }
 
         void
-        wait_for_subthreads(void) noexcept
+        wait_for_subthreads(int mySense) noexcept
         {
-            int numThreadsToWaitFor = threadSquad_.terminationRequested_
+            int numThreadsToWaitFor = threadSquad_.task_.terminationRequested
                 ? threadSquad_.numThreads
-                : threadSquad_.concurrency_;
-            threadSquad_.wait_for_subthreads(threadIdx_, numThreadsToWaitFor);
+                : threadSquad_.task_.concurrency;
+            threadSquad_.wait_for_subthreads(mySense, threadIdx_, numThreadsToWaitFor);
         }
 
-        void
-        task_wait(void) noexcept
+        task
+        task_wait(int mySense) noexcept
         {
             auto& notifyData = threadSquad_.threadNotifyData_[threadIdx_];
             auto oldSense = sense_.load(std::memory_order_relaxed);
+            //gsl_Expects(oldSense == mySense);
             detail::wait_and_load(notifyData.mutex, notifyData.cv, newSense_, oldSense);
-#ifdef DEBUG_WAIT_CHAIN
-            std::printf("thread squad #%u, thread %d: started\n", threadSquad_.threadSquadId_, threadIdx_);
-            std::fflush(stdout);
-#endif // DEBUG_WAIT_CHAIN
+            THREAD_SQUAD_DBG("thread squad #%u, thread %d: started\n", threadSquad_.threadSquadId_, threadIdx_);
+            return threadSquad_.task_;
         }
 
         void
-        task_run(void) const noexcept
+        task_run(task const& task) const noexcept
         {
-            if (threadSquad_.action_ && threadIdx_ < threadSquad_.concurrency_)
+            if (task.action && threadIdx_ < task.concurrency)
             {
                     // Like the parallel overloads of the standard algorithms, we terminate (implicitly) if an exception is thrown
                     // by a task because the semantics of exceptions in multiplexed actions are unclear.
-                auto localAction = threadSquad_.action_;
-                localAction(threadSquad_.make_context_for(threadIdx_));
+                task.action(threadSquad_.make_context_for(threadIdx_));
             }
         }
 
         void
-        task_signal_completion(void) noexcept
+        task_signal_completion(int mySense) noexcept
         {
-#ifdef DEBUG_WAIT_CHAIN
-            std::printf("thread squad #%u, thread %d: signaling\n", threadSquad_.threadSquadId_, threadIdx_);
-            std::fflush(stdout);
-#endif // DEBUG_WAIT_CHAIN
+            THREAD_SQUAD_DBG("thread squad #%u, thread %d: signaling\n", threadSquad_.threadSquadId_, threadIdx_);
             auto& notifyData = threadSquad_.threadNotifyData_[threadIdx_];
+            //gsl_Expects(sense_.load(std::memory_order_relaxed) == mySense);
             detail::toggle_and_notify(notifyData.mutex, notifyData.cv, sense_);
             //sense_.store(newSense_.load(std::memory_order_relaxed), std::memory_order_release);
         }
@@ -614,12 +624,6 @@ public:
         thread_squad_id(void) const noexcept
         {
             return threadSquad_.threadSquadId_;
-        }
-
-        bool
-        termination_requested(void) const noexcept
-        {
-            return threadSquad_.terminationRequested_;
         }
 
         static thread_data& from_thread_context(void* ctx)
@@ -645,12 +649,14 @@ private:
     aligned_buffer<thread_data, cache_line_alignment> threadData_;
 
         // task-specific data
-    std::function<void(thread_squad::task_context)> action_;
-    int concurrency_;
-    bool terminationRequested_;
+    task task_;
 
         // debugging data
     unsigned threadSquadId_; // for runtime thread identification during debugging
+
+public:
+    int mySense_;
+private:
 
 
     thread_squad::task_context
@@ -680,14 +686,14 @@ private:
     }
 
     void
-    notify_subthreads_impl(int first, int last, int stride)
+    notify_subthreads_impl(int mySense, int first, int last, int stride)
     {
         while (stride != 1)
         {
             int substride = next_substride(stride);
             for (int i = first + substride; i < last; i += substride)
             {
-                notify_thread(first, i);
+                notify_thread(mySense, first, i);
             }
             last = std::min(first + substride, last);
             stride = substride;
@@ -695,14 +701,14 @@ private:
     }
 
     void
-    wait_for_subthreads_impl(int first, int last, int stride)
+    wait_for_subthreads_impl(int mySense, int first, int last, int stride)
     {
         int substride = next_substride(stride);
         if (stride != 1)
         {
-            wait_for_subthreads_impl(first, std::min(first + substride, last), substride);
+            wait_for_subthreads_impl(mySense, first, std::min(first + substride, last), substride);
         }
-        if (terminationRequested_)
+        if (task_.terminationRequested)
         {
             std::array<os_thread*, treeBreadth> threads;
             std::size_t lnumThreads = 0;
@@ -717,14 +723,13 @@ private:
 #ifdef DEBUG_WAIT_CHAIN
             for (int i = first + substride; i < last; i += substride)
             {
-                std::printf("thread squad #%u, thread %d: joined %d\n", threadSquadId_, first, i);
-                std::fflush(stdout);
+                THREAD_SQUAD_DBG("thread squad #%u, thread %d: joined %d\n", threadSquadId_, first, i);
             }
 #endif // DEBUG_WAIT_CHAIN
         }
         for (int i = first + substride; i < last; i += substride)
         {
-            wait_for_thread(first, i);
+            wait_for_thread(mySense, first, i);
         }
     }
 
@@ -734,7 +739,8 @@ public:
         : thread_squad_impl_base{ params.num_threads },
           threadNotifyData_(gsl::narrow<std::size_t>(params.num_threads)),
           threadData_(gsl::narrow<std::size_t>(params.num_threads), std::in_place, *this),
-          threadSquadId_(threadSquadCounter.fetch_add(1, std::memory_order_acq_rel))
+          threadSquadId_(threadSquadCounter.fetch_add(1, std::memory_order_acq_rel)),
+          mySense_(0)
     {
         for (int i = 0; i < numThreads; ++i)
         {
@@ -745,13 +751,10 @@ public:
         {
             for (int i = 0; i < numThreads; ++i)
             {
-    #ifdef DEBUG_WAIT_CHAIN
-                std::printf("thread squad #%u, thread -1: pin %d to CPU %d\n", threadSquadId_, i,
-                    int(detail::get_hardware_thread_id(i, params.max_num_hardware_threads, params.hardware_thread_mappings)));
-                std::fflush(stdout);
-    #endif // DEBUG_WAIT_CHAIN
-                threadData_[i].osThread_.set_core_affinity(
-                    detail::get_hardware_thread_id(i, params.max_num_hardware_threads, params.hardware_thread_mappings));
+                std::size_t coreAffinity = detail::get_hardware_thread_id(
+                    i, params.max_num_hardware_threads, params.hardware_thread_mappings);
+                THREAD_SQUAD_DBG("thread squad #%u, thread -1: pin %d to CPU %d\n", threadSquadId_, i, int(coreAffinity));
+                threadData_[i].osThread_.set_core_affinity(coreAffinity);
             }
         }
 #endif // THREAD_PINNING_SUPPORTED
@@ -766,76 +769,64 @@ public:
     }
 
     void
-    notify_thread([[maybe_unused]] int callingThreadIdx, int targetThreadIdx)
+    notify_thread(int mySense, [[maybe_unused]] int callingThreadIdx, int targetThreadIdx)
     {
-    #ifdef DEBUG_WAIT_CHAIN
-        std::printf("thread squad #%u, thread %d: notifying %d\n", threadSquadId_, callingThreadIdx, targetThreadIdx);
-        std::fflush(stdout);
-    #endif // DEBUG_WAIT_CHAIN
+        THREAD_SQUAD_DBG("thread squad #%u, thread %d: notifying %d\n", threadSquadId_, callingThreadIdx, targetThreadIdx);
+        //gsl_Expects(threadData_[targetThreadIdx].newSense_.load(std::memory_order_relaxed) == mySense);
         detail::toggle_and_notify(threadNotifyData_[targetThreadIdx].mutex, threadNotifyData_[targetThreadIdx].cv, threadData_[targetThreadIdx].newSense_);
 
         if (!threadData_[targetThreadIdx].osThread_.is_running())
         {
-#ifdef DEBUG_WAIT_CHAIN
-            std::printf("thread squad #%u, thread %d: forking %d\n", threadSquadId_, callingThreadIdx, targetThreadIdx);
-            std::fflush(stdout);
-#endif // DEBUG_WAIT_CHAIN
+            THREAD_SQUAD_DBG("thread squad #%u, thread %d: forking %d\n", threadSquadId_, callingThreadIdx, targetThreadIdx);
             threadData_[targetThreadIdx].osThread_.fork(thread_squad_thread_func, thread_context_for(targetThreadIdx));
         }
     }
 
     void
-    wait_for_thread([[maybe_unused]] int callingThreadIdx, int targetThreadIdx, bool spinWait = true)
+    wait_for_thread(int mySense, [[maybe_unused]] int callingThreadIdx, int targetThreadIdx, bool spinWait = true)
     {
-        if (terminationRequested_ && threadData_[targetThreadIdx].osThread_.is_running())
+        if (task_.terminationRequested && threadData_[targetThreadIdx].osThread_.is_running())
         {
             os_thread* thread = &threadData_[targetThreadIdx].osThread_;
             os_thread::join(std::array{ thread });
-#ifdef DEBUG_WAIT_CHAIN
-            std::printf("thread squad #%u, thread %d: joined %d\n", threadSquadId_, callingThreadIdx, targetThreadIdx);
-            std::fflush(stdout);
-#endif // DEBUG_WAIT_CHAIN
+            THREAD_SQUAD_DBG("thread squad #%u, thread %d: joined %d\n", threadSquadId_, callingThreadIdx, targetThreadIdx);
         }
 
         int newSense_ = threadData_[targetThreadIdx].newSense_.load(std::memory_order_relaxed);
         int oldSense = 1 ^ newSense_;
+        //gsl_Expects(oldSense == mySense);
         //detail::atomic_wait_while_equal(threadData_[targetThreadIdx].sense_, oldSense, spinWait);
         detail::wait_and_load(threadNotifyData_[targetThreadIdx].mutex, threadNotifyData_[targetThreadIdx].cv, threadData_[targetThreadIdx].sense_, oldSense);
-    #ifdef DEBUG_WAIT_CHAIN
-        std::printf("thread squad #%u, thread %d: awaited %d\n", threadSquadId_, callingThreadIdx, targetThreadIdx);
-        std::fflush(stdout);
-    #endif // DEBUG_WAIT_CHAIN
+        THREAD_SQUAD_DBG("thread squad #%u, thread %d: awaited %d\n", threadSquadId_, callingThreadIdx, targetThreadIdx);
     }
 
     void
-    notify_subthreads(int callingThreadIdx, int _concurrency)
+    notify_subthreads(int mySense, int callingThreadIdx, int _concurrency)
     {
         int stride = threadData_[callingThreadIdx].numSubthreads_;
-        notify_subthreads_impl(callingThreadIdx, std::min(callingThreadIdx + stride, _concurrency), stride);
+        notify_subthreads_impl(mySense, callingThreadIdx, std::min(callingThreadIdx + stride, _concurrency), stride);
     }
 
     void
-    wait_for_subthreads(int callingThreadIdx, int _concurrency)
+    wait_for_subthreads(int mySense, int callingThreadIdx, int _concurrency)
     {
         int stride = threadData_[callingThreadIdx].numSubthreads_;
-        wait_for_subthreads_impl(callingThreadIdx, std::min(callingThreadIdx + stride, _concurrency), stride);
+        wait_for_subthreads_impl(mySense, callingThreadIdx, std::min(callingThreadIdx + stride, _concurrency), stride);
     }
 
     void
-    store_task(std::function<void(thread_squad::task_context)> _action, int _concurrency, bool _join)
+    store_task(task _task)
     noexcept // We cannot really handle exceptions here.
     {
-        gsl_Expects(_action || _join);
+        gsl_Expects(_task.action || _task.terminationRequested);
 
-        terminationRequested_ = _join;
-        concurrency_ = _concurrency;
-        action_ = std::move(_action);
+        task_ = std::move(_task);
     }
 
     void
     release_task(void)
     {
-        action_ = { };
+        task_.action = { };
     }
 
     unsigned
@@ -854,19 +845,22 @@ static void
 run_thread(thread_squad_impl::thread_data& threadData)
 {
     bool justWoken = true;
-    do
+    int mySense = 0;
+    int pass = 0;
+    for (;;)
     {
-        threadData.task_wait();
-
-        threadData.notify_subthreads(justWoken);
+        auto task = threadData.task_wait(mySense);
+        threadData.notify_subthreads(mySense);
+        threadData.task_run(task);
+        threadData.wait_for_subthreads(mySense);
+        threadData.task_signal_completion(mySense);
         justWoken = false;
-
-        threadData.task_run();
-
-        threadData.wait_for_subthreads();
-
-        threadData.task_signal_completion();
-    } while (!threadData.termination_requested());
+        mySense = 1 ^ mySense;
+        ++pass;
+        if (task.terminationRequested) break;
+    }
+    (void) pass;
+    THREAD_SQUAD_DBG("thread squad #%u, thread %d: exiting after %d passes\n", threadData.thread_squad_id(), threadData.thread_idx(), pass);
 }
 
 
@@ -895,10 +889,11 @@ noexcept // We cannot really handle exceptions here.
 
     if (haveWork)
     {
-        self.store_task(std::move(action), concurrency, join);
-        self.notify_thread(-1, 0);
-        self.wait_for_thread(-1, 0, false); // no spin wait in main thread
+        self.store_task({ std::move(action), concurrency, join });
+        self.notify_thread(self.mySense_, -1, 0);
+        self.wait_for_thread(self.mySense_, -1, 0, false); // no spin wait in main thread
         self.release_task();
+        self.mySense_ = 1 ^ self.mySense_;
     }
 }
 
