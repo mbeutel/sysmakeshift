@@ -171,7 +171,8 @@ public:
 
 #endif // _WIN32
 
-static void
+#ifdef THREAD_PINNING_SUPPORTED
+[[maybe_unused]] static void
 setThreadAffinity(std::thread::native_handle_type handle, std::size_t coreIdx)
 {
 # if defined(_WIN32)
@@ -189,7 +190,7 @@ setThreadAffinity(std::thread::native_handle_type handle, std::size_t coreIdx)
 # endif
 }
 
-#ifdef USE_PTHREAD_SETAFFINITY
+# ifdef USE_PTHREAD_SETAFFINITY
 static void
 setThreadAttrAffinity(pthread_attr_t& attr, std::size_t coreIdx)
 {
@@ -197,8 +198,8 @@ setThreadAttrAffinity(pthread_attr_t& attr, std::size_t coreIdx)
     cpuSet.set_cpu_flag(coreIdx);
     detail::posix_check(::pthread_attr_setaffinity_np(&attr, cpuSet.size(), cpuSet.data()));
 }
-#endif // USE_PTHREAD_SETAFFINITY
-
+# endif // USE_PTHREAD_SETAFFINITY
+#endif // THREAD_PINNING_SUPPORTED
 
 #if defined(_WIN32)
 struct win32_handle_deleter
@@ -565,29 +566,28 @@ public:
         }
 
         void
-        notify_subthreads(int mySense) noexcept
+        notify_subthreads(void) noexcept
         {
             int numThreadsToWake = threadSquad_.task_.terminationRequested
                 ? threadSquad_.numThreads
                 : threadSquad_.task_.concurrency;
-            threadSquad_.notify_subthreads(mySense, threadIdx_, numThreadsToWake);
+            threadSquad_.notify_subthreads(threadIdx_, numThreadsToWake);
         }
 
         void
-        wait_for_subthreads(int mySense) noexcept
+        wait_for_subthreads(void) noexcept
         {
             int numThreadsToWaitFor = threadSquad_.task_.terminationRequested
                 ? threadSquad_.numThreads
                 : threadSquad_.task_.concurrency;
-            threadSquad_.wait_for_subthreads(mySense, threadIdx_, numThreadsToWaitFor);
+            threadSquad_.wait_for_subthreads(threadIdx_, numThreadsToWaitFor);
         }
 
         task
-        task_wait(int mySense) noexcept
+        task_wait(void) noexcept
         {
             auto& notifyData = threadSquad_.threadNotifyData_[threadIdx_];
             auto oldSense = sense_.load(std::memory_order_relaxed);
-            //gsl_Expects(oldSense == mySense);
             detail::wait_and_load(notifyData.mutex, notifyData.cv, newSense_, oldSense);
             THREAD_SQUAD_DBG("thread squad #%u, thread %d: started\n", threadSquad_.threadSquadId_, threadIdx_);
             return threadSquad_.task_;
@@ -605,11 +605,10 @@ public:
         }
 
         void
-        task_signal_completion(int mySense) noexcept
+        task_signal_completion(void) noexcept
         {
             THREAD_SQUAD_DBG("thread squad #%u, thread %d: signaling\n", threadSquad_.threadSquadId_, threadIdx_);
             auto& notifyData = threadSquad_.threadNotifyData_[threadIdx_];
-            //gsl_Expects(sense_.load(std::memory_order_relaxed) == mySense);
             detail::toggle_and_notify(notifyData.mutex, notifyData.cv, sense_);
             //sense_.store(newSense_.load(std::memory_order_relaxed), std::memory_order_release);
         }
@@ -654,10 +653,6 @@ private:
         // debugging data
     unsigned threadSquadId_; // for runtime thread identification during debugging
 
-public:
-    int mySense_;
-private:
-
 
     thread_squad::task_context
     make_context_for(int threadIdx) noexcept
@@ -686,14 +681,14 @@ private:
     }
 
     void
-    notify_subthreads_impl(int mySense, int first, int last, int stride)
+    notify_subthreads_impl(int first, int last, int stride)
     {
         while (stride != 1)
         {
             int substride = next_substride(stride);
             for (int i = first + substride; i < last; i += substride)
             {
-                notify_thread(mySense, first, i);
+                notify_thread(first, i);
             }
             last = std::min(first + substride, last);
             stride = substride;
@@ -701,12 +696,12 @@ private:
     }
 
     void
-    wait_for_subthreads_impl(int mySense, int first, int last, int stride)
+    wait_for_subthreads_impl(int first, int last, int stride)
     {
         int substride = next_substride(stride);
         if (stride != 1)
         {
-            wait_for_subthreads_impl(mySense, first, std::min(first + substride, last), substride);
+            wait_for_subthreads_impl(first, std::min(first + substride, last), substride);
         }
         if (task_.terminationRequested)
         {
@@ -729,7 +724,7 @@ private:
         }
         for (int i = first + substride; i < last; i += substride)
         {
-            wait_for_thread(mySense, first, i);
+            wait_for_thread(first, i);
         }
     }
 
@@ -739,8 +734,7 @@ public:
         : thread_squad_impl_base{ params.num_threads },
           threadNotifyData_(gsl::narrow<std::size_t>(params.num_threads)),
           threadData_(gsl::narrow<std::size_t>(params.num_threads), std::in_place, *this),
-          threadSquadId_(threadSquadCounter.fetch_add(1, std::memory_order_acq_rel)),
-          mySense_(0)
+          threadSquadId_(threadSquadCounter.fetch_add(1, std::memory_order_acq_rel))
     {
         for (int i = 0; i < numThreads; ++i)
         {
@@ -769,10 +763,9 @@ public:
     }
 
     void
-    notify_thread(int mySense, [[maybe_unused]] int callingThreadIdx, int targetThreadIdx)
+    notify_thread([[maybe_unused]] int callingThreadIdx, int targetThreadIdx)
     {
         THREAD_SQUAD_DBG("thread squad #%u, thread %d: notifying %d\n", threadSquadId_, callingThreadIdx, targetThreadIdx);
-        //gsl_Expects(threadData_[targetThreadIdx].newSense_.load(std::memory_order_relaxed) == mySense);
         detail::toggle_and_notify(threadNotifyData_[targetThreadIdx].mutex, threadNotifyData_[targetThreadIdx].cv, threadData_[targetThreadIdx].newSense_);
 
         if (!threadData_[targetThreadIdx].osThread_.is_running())
@@ -783,7 +776,7 @@ public:
     }
 
     void
-    wait_for_thread(int mySense, [[maybe_unused]] int callingThreadIdx, int targetThreadIdx, bool spinWait = true)
+    wait_for_thread([[maybe_unused]] int callingThreadIdx, int targetThreadIdx, bool spinWait = true)
     {
         if (task_.terminationRequested && threadData_[targetThreadIdx].osThread_.is_running())
         {
@@ -794,24 +787,23 @@ public:
 
         int newSense_ = threadData_[targetThreadIdx].newSense_.load(std::memory_order_relaxed);
         int oldSense = 1 ^ newSense_;
-        //gsl_Expects(oldSense == mySense);
         //detail::atomic_wait_while_equal(threadData_[targetThreadIdx].sense_, oldSense, spinWait);
         detail::wait_and_load(threadNotifyData_[targetThreadIdx].mutex, threadNotifyData_[targetThreadIdx].cv, threadData_[targetThreadIdx].sense_, oldSense);
         THREAD_SQUAD_DBG("thread squad #%u, thread %d: awaited %d\n", threadSquadId_, callingThreadIdx, targetThreadIdx);
     }
 
     void
-    notify_subthreads(int mySense, int callingThreadIdx, int _concurrency)
+    notify_subthreads(int callingThreadIdx, int _concurrency)
     {
         int stride = threadData_[callingThreadIdx].numSubthreads_;
-        notify_subthreads_impl(mySense, callingThreadIdx, std::min(callingThreadIdx + stride, _concurrency), stride);
+        notify_subthreads_impl(callingThreadIdx, std::min(callingThreadIdx + stride, _concurrency), stride);
     }
 
     void
-    wait_for_subthreads(int mySense, int callingThreadIdx, int _concurrency)
+    wait_for_subthreads(int callingThreadIdx, int _concurrency)
     {
         int stride = threadData_[callingThreadIdx].numSubthreads_;
-        wait_for_subthreads_impl(mySense, callingThreadIdx, std::min(callingThreadIdx + stride, _concurrency), stride);
+        wait_for_subthreads_impl(callingThreadIdx, std::min(callingThreadIdx + stride, _concurrency), stride);
     }
 
     void
@@ -845,17 +837,15 @@ static void
 run_thread(thread_squad_impl::thread_data& threadData)
 {
     bool justWoken = true;
-    int mySense = 0;
     int pass = 0;
     for (;;)
     {
-        auto task = threadData.task_wait(mySense);
-        threadData.notify_subthreads(mySense);
+        auto task = threadData.task_wait();
+        threadData.notify_subthreads();
         threadData.task_run(task);
-        threadData.wait_for_subthreads(mySense);
-        threadData.task_signal_completion(mySense);
+        threadData.wait_for_subthreads();
+        threadData.task_signal_completion();
         justWoken = false;
-        mySense = 1 ^ mySense;
         ++pass;
         if (task.terminationRequested) break;
     }
@@ -890,10 +880,9 @@ noexcept // We cannot really handle exceptions here.
     if (haveWork)
     {
         self.store_task({ std::move(action), concurrency, join });
-        self.notify_thread(self.mySense_, -1, 0);
-        self.wait_for_thread(self.mySense_, -1, 0, false); // no spin wait in main thread
+        self.notify_thread(-1, 0);
+        self.wait_for_thread(-1, 0, false); // no spin wait in main thread
         self.release_task();
-        self.mySense_ = 1 ^ self.mySense_;
     }
 }
 
