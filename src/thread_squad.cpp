@@ -300,16 +300,16 @@ pause(void)
 }
 #endif // defined(__i386__) || defined(__x86_64__) || defined(_M_IX86) || defined(_M_X64)
 
-constexpr int spinCount = 4;
-constexpr int spinRep = 2;
+constexpr int spinCount = 6; // 4 or 6
+constexpr int spinRep = 1; // 2 or 1
 constexpr int pauseCount = 9;
-constexpr int yieldCount = 6;
+constexpr int yieldCount = 0; // 6
 
 template <typename T>
 bool
 wait_equal_exponential_backoff(std::atomic<T> const& a, T oldValue, bool spinWait = true)
 {
-    int lspinCount = spinWait ? spinCount : 1;
+    int lspinCount = spinWait ? spinCount : 0;
     if (a.load(std::memory_order_relaxed) != oldValue) return true;
     for (int i = 0; i < (1 << pauseCount); ++i)
     {
@@ -326,9 +326,11 @@ wait_equal_exponential_backoff(std::atomic<T> const& a, T oldValue, bool spinWai
             }
             n *= 2;
         }
+        if (a.load(std::memory_order_relaxed) != oldValue) return true;
         detail::pause();
     }
-    for (int i = 0; i < (1 << yieldCount); ++i)
+    int lyieldCount = spinWait ? (1 << yieldCount) : 0;
+    for (int i = 0; i < lyieldCount; ++i)
     {
         if (a.load(std::memory_order_relaxed) != oldValue) return true;
         std::this_thread::yield();
@@ -354,9 +356,11 @@ template <typename T>
 T
 wait_and_load(
     std::mutex& mutex, std::condition_variable& cv,
-    std::atomic<T>& a, T oldValue)
+    std::atomic<T>& a, T oldValue,
+    bool spinWait = true)
 {
-    if (!detail::wait_equal_exponential_backoff(a, oldValue))
+    //if (!spinWait || !detail::wait_equal_exponential_backoff(a, oldValue))
+    if (!detail::wait_equal_exponential_backoff(a, oldValue, spinWait))
     {
         auto lock = std::unique_lock(mutex); // implicit acquire
         while (a.load(std::memory_order_relaxed) == oldValue)
@@ -796,7 +800,7 @@ public:
         int oldSense = 1 ^ newSense_;
         //gsl_Expects(oldSense == mySense);
         //detail::atomic_wait_while_equal(threadData_[targetThreadIdx].sense_, oldSense, spinWait);
-        detail::wait_and_load(threadNotifyData_[targetThreadIdx].mutex, threadNotifyData_[targetThreadIdx].cv, threadData_[targetThreadIdx].sense_, oldSense);
+        detail::wait_and_load(threadNotifyData_[targetThreadIdx].mutex, threadNotifyData_[targetThreadIdx].cv, threadData_[targetThreadIdx].sense_, oldSense, spinWait);
         THREAD_SQUAD_DBG("thread squad #%u, thread %d: awaited %d\n", threadSquadId_, callingThreadIdx, targetThreadIdx);
     }
 
