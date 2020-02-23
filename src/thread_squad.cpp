@@ -696,23 +696,6 @@ private:
         {
             wait_for_subthreads_impl(first, std::min(first + substride, last), substride);
         }
-        //if (task_.terminationRequested)
-        //{
-        //    std::array<os_thread*, treeBreadth> threads;
-        //    std::size_t lnumThreads = 0;
-        //    for (int i = first + substride; i < last; i += substride)
-        //    {
-        //        if (threadData_[i].osThread_.is_running())
-        //        {
-        //            threads[lnumThreads++] = &threadData_[i].osThread_;
-        //        }
-        //    }
-        //    os_thread::join(gsl::span(threads.data(), lnumThreads));
-        //    for (int i = first + substride; i < last; i += substride)
-        //    {
-        //        THREAD_SQUAD_DBG("thread squad #%u, thread %d: joined %d\n", threadSquadId_, first, i);
-        //    }
-        //}
         for (int i = first + substride; i < last; i += substride)
         {
             wait_for_thread(first, i);
@@ -775,7 +758,7 @@ public:
         for (gsl::index i = 0; i < numThreads; )
         {
             os_thread* lthreads[handleChunkSize];
-            int d = gsl::narrow<int>(std::min<gsl::dim>(numThreads - i, MAXIMUM_WAIT_OBJECTS));
+            int d = gsl::narrow<int>(std::min<gsl::dim>(numThreads - i, handleChunkSize));
             for (int j = 0; j < d; ++j)
             {
                 THREAD_SQUAD_DBG("thread squad #%u, thread -1: forking %d\n", threadSquadId_, i + j);
@@ -791,24 +774,11 @@ public:
     {
         THREAD_SQUAD_DBG("thread squad #%u, thread %d: notifying %d\n", threadSquadId_, callingThreadIdx, targetThreadIdx);
         detail::toggle_and_notify(threadNotifyData_[targetThreadIdx].mutex, threadNotifyData_[targetThreadIdx].cv, threadData_[targetThreadIdx].newSense_);
-
-        //if (!threadData_[targetThreadIdx].osThread_.is_running())
-        //{
-        //    THREAD_SQUAD_DBG("thread squad #%u, thread %d: forking %d\n", threadSquadId_, callingThreadIdx, targetThreadIdx);
-        //    threadData_[targetThreadIdx].osThread_.fork(thread_squad_thread_func, thread_context_for(targetThreadIdx));
-        //}
     }
 
     void
     wait_for_thread([[maybe_unused]] int callingThreadIdx, int targetThreadIdx, bool spinWait = true)
     {
-        //if (task_.terminationRequested && threadData_[targetThreadIdx].osThread_.is_running())
-        //{
-        //    os_thread* thread = &threadData_[targetThreadIdx].osThread_;
-        //    os_thread::join(std::array<os_thread*, 1>{ thread }); // explicit type given to work around AppleClang 10.0 bug
-        //    THREAD_SQUAD_DBG("thread squad #%u, thread %d: joined %d\n", threadSquadId_, callingThreadIdx, targetThreadIdx);
-        //}
-
         int newSense_ = threadData_[targetThreadIdx].newSense_.load(std::memory_order_relaxed);
         int oldSense = 1 ^ newSense_;
         detail::wait_and_load(threadNotifyData_[targetThreadIdx].mutex, threadNotifyData_[targetThreadIdx].cv, threadData_[targetThreadIdx].sense_, oldSense, spinWait);
@@ -911,8 +881,11 @@ noexcept // We cannot really handle exceptions here.
         {
             self.fork_all_threads();
         }
-        self.wait_for_thread(-1, 0, false); // no spin wait in main thread
-        if (join)
+        if (!join)
+        {
+            self.wait_for_thread(-1, 0, false); // no spin wait in main thread
+        }
+        else
         {
             self.join_all_threads();
         }
