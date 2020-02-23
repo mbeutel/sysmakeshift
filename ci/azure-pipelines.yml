@@ -33,6 +33,12 @@ jobs:
       platforms: [x86, x64]
 
     - os: Windows
+      cxxCompiler: MSVC
+      cxxCompilerVersions: [19_2]
+      platforms: [x86, x64]
+      cmakeBuildConfigurations: [Release]
+
+    - os: Windows
       cxxCompiler: Clang
       cxxCompilerVersions: [9]
       platforms: [x86, x64]
@@ -46,9 +52,15 @@ jobs:
       cxxCompiler: GCC
       cxxCompilerVersions: [9]
       platforms: [x64]
-      tag: 'sanitize'
+      cmakeBuildConfigurations: [Release]
+
+    - os: Linux
+      cxxCompiler: GCC
+      cxxCompilerVersions: [9]
+      platforms: [x64]
       vcpkgTriplet: <platform>-<os>-sanitize
       cmakeConfigArgs: '<cmakeConfigArgs> -DCMAKESHIFT_PRIVATE_COMPILE_SETTINGS=runtime-checks;debug-stdlib'
+      tag: 'sanitize'
 
     - os: Linux
       cxxCompiler: Clang
@@ -59,9 +71,15 @@ jobs:
       cxxCompiler: Clang
       cxxCompilerVersions: [9]
       platforms: [x64]
-      tag: 'sanitize'
+      cmakeBuildConfigurations: [Release]
+
+    - os: Linux
+      cxxCompiler: Clang
+      cxxCompilerVersions: [9]
+      platforms: [x64]
       vcpkgTriplet: <platform>-<os>-sanitize
       cmakeConfigArgs: '<cmakeConfigArgs> -DCMAKESHIFT_PRIVATE_COMPILE_SETTINGS=runtime-checks;debug-stdlib'
+      tag: 'sanitize'
 
     - os: MacOS
       cxxCompiler: GCC
@@ -69,6 +87,18 @@ jobs:
       platforms: [x64]
 
     - os: MacOS
+      cxxCompiler: GCC
+      cxxCompilerVersions: [9]
+      platforms: [x64]
+      cmakeBuildConfigurations: [Release]
+
+    - os: MacOS
       cxxCompiler: AppleClang
       cxxCompilerVersions: [10, 10_0_1, 11]
       platforms: [x64]
+
+    - os: MacOS
+      cxxCompiler: AppleClang
+      cxxCompilerVersions: [11]
+      platforms: [x64]
+      cmakeBuildConfigurations: [Release]

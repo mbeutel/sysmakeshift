@@ -139,15 +139,28 @@ public:
     }
 
         //
-        // Runs the given action on `concurrency` threads and waits until all tasks have run to completion.
+        // Runs the given action on all threads and waits until all tasks have run to completion.
         //ᅟ
-        // `concurrency == 0` indicates that the maximum concurrency level should be used, i.e. the task is run on all threads in
-        // the thread squad. `concurrency` must not exceed the number of threads in the thread squad.
         // The thread squad makes a dedicated copy of `action` for every participating thread and invokes it with an appropriate
         // task context. If `action()` throws an exception, `std::terminate()` is called.
         //
     void
-    run(std::function<void(task_context)> action, int concurrency = 0) &
+    run(std::function<void(task_context)> action) &
+    {
+        gsl_Expects(action);
+
+        do_run(std::move(action), handle_->numThreads, false);
+    }
+
+        //
+        // Runs the given action on `concurrency` threads and waits until all tasks have run to completion.
+        //ᅟ
+        // `concurrency` must not exceed the number of threads in the thread squad.
+        // The thread squad makes a dedicated copy of `action` for every participating thread and invokes it with an appropriate
+        // task context. If `action()` throws an exception, `std::terminate()` is called.
+        //
+    void
+    run(std::function<void(task_context)> action, int concurrency) &
     {
         gsl_Expects(action);
         gsl_Expects(concurrency >= 0 && concurrency <= handle_->numThreads);
@@ -156,15 +169,28 @@ public:
     }
 
         //
-        // Runs the given action on `concurrency` threads and waits until all tasks have run to completion.
+        // Runs the given action on all threads and waits until all tasks have run to completion.
         //ᅟ
-        // `concurrency == 0` indicates that the maximum concurrency level should be used, i.e. the task is run on all threads in
-        // the thread squad. `concurrency` must not exceed the number of threads in the thread squad.
         // The thread squad makes a dedicated copy of `action` for every participating thread and invokes it with an appropriate
         // task context. If `action()` throws an exception, `std::terminate()` is called.
         //
     void
-    run(std::function<void(task_context)> action, int concurrency = 0) &&
+    run(std::function<void(task_context)> action) &&
+    {
+        gsl_Expects(action);
+
+        do_run(std::move(action), handle_->numThreads, true);
+    }
+
+        //
+        // Runs the given action on `concurrency` threads and waits until all tasks have run to completion.
+        //ᅟ
+        // `concurrency` must not exceed the number of threads in the thread squad.
+        // The thread squad makes a dedicated copy of `action` for every participating thread and invokes it with an appropriate
+        // task context. If `action()` throws an exception, `std::terminate()` is called.
+        //
+    void
+    run(std::function<void(task_context)> action, int concurrency) &&
     {
         gsl_Expects(action);
         gsl_Expects(concurrency >= 0 && concurrency <= handle_->numThreads);
