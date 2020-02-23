@@ -341,26 +341,11 @@ wait_equal_exponential_backoff(std::atomic<T> const& a, T oldValue, bool spinWai
 
 template <typename T>
 T
-atomic_wait_while_equal(std::atomic<T> const& a, T oldValue, bool spinWait = true)
-{
-    if (!detail::wait_equal_exponential_backoff(a, oldValue, spinWait))
-    {
-        while (a.load(std::memory_order_relaxed) == oldValue)
-        {
-            std::this_thread::yield();
-        }
-    }
-    return a.load(std::memory_order_acquire);
-}
-
-template <typename T>
-T
 wait_and_load(
     std::mutex& mutex, std::condition_variable& cv,
     std::atomic<T>& a, T oldValue,
     bool spinWait = true)
 {
-    //if (!spinWait || !detail::wait_equal_exponential_backoff(a, oldValue))
     if (!detail::wait_equal_exponential_backoff(a, oldValue, spinWait))
     {
         auto lock = std::unique_lock(mutex); // implicit acquire
@@ -785,13 +770,12 @@ public:
         if (task_.terminationRequested && threadData_[targetThreadIdx].osThread_.is_running())
         {
             os_thread* thread = &threadData_[targetThreadIdx].osThread_;
-            os_thread::join(std::array{ thread });
+            os_thread::join(std::array<os_thread*, 1>{ thread }); // explicit type given to work around AppleClang 10.0 bug
             THREAD_SQUAD_DBG("thread squad #%u, thread %d: joined %d\n", threadSquadId_, callingThreadIdx, targetThreadIdx);
         }
 
         int newSense_ = threadData_[targetThreadIdx].newSense_.load(std::memory_order_relaxed);
         int oldSense = 1 ^ newSense_;
-        //detail::atomic_wait_while_equal(threadData_[targetThreadIdx].sense_, oldSense, spinWait);
         detail::wait_and_load(threadNotifyData_[targetThreadIdx].mutex, threadNotifyData_[targetThreadIdx].cv, threadData_[targetThreadIdx].sense_, oldSense, spinWait);
         THREAD_SQUAD_DBG("thread squad #%u, thread %d: awaited %d\n", threadSquadId_, callingThreadIdx, targetThreadIdx);
     }
