@@ -824,7 +824,6 @@ public:
 static void
 run_thread(thread_squad_impl::thread_data& threadData)
 {
-    bool justWoken = true;
     int pass = 0;
     for (;;)
     {
@@ -833,7 +832,6 @@ run_thread(thread_squad_impl::thread_data& threadData)
         threadData.task_run(task);
         threadData.wait_for_subthreads();
         threadData.task_signal_completion();
-        justWoken = false;
         ++pass;
         if (task.terminationRequested) break;
     }
@@ -909,7 +907,7 @@ thread_squad_thread_func(void* ctx)
         detail::posix_check(::pthread_setname_np(::pthread_self(), buf));
 #elif defined(__APPLE__)
         char buf[64];
-        std::sprintf(buf, L"sysmakeshift thread squad #%u, thread %d",
+        std::sprintf(buf, "sysmakeshift thread squad #%u, thread %d",
             threadData.thread_squad_id(), threadData.thread_idx());
         detail::posix_check(::pthread_setname_np(buf));
 #endif
