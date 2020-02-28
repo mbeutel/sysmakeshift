@@ -171,6 +171,7 @@ public:
             data_ = std::exchange(rhs.data_, { });
             size_ = std::exchange(rhs.size_, { });
         }
+        return *this;
     }
 
     ~aligned_buffer(void)
