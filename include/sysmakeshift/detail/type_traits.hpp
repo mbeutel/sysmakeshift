@@ -23,6 +23,9 @@ template <template <typename...> class Z, typename... Ts> struct can_instantiate
 template <template <typename...> class Z, typename... Ts> constexpr bool can_instantiate_v = can_instantiate<Z, Ts...>::value;
 
 
+template <typename T> constexpr T static_const{ };
+
+
 } // namespace detail
 
 } // namespace sysmakeshift
