@@ -135,7 +135,8 @@ provides_static_alignment(std::size_t alignmentProvided, std::size_t alignmentRe
     //
     // Computes whether the provided alignment satisfies the requested alignment.
     //ᅟ
-    // Looks up the alignments corresponding to the special alignment values `large_page_alignment`, `page_alignment`, and `cache_line_alignment`.
+    // Looks up the alignments corresponding to the special alignment values `large_page_alignment`, `page_alignment`, and
+    // `cache_line_alignment`.
     //
 inline bool
 provides_dynamic_alignment(std::size_t alignmentProvided, std::size_t alignmentRequested) noexcept
@@ -172,7 +173,8 @@ public:
 
 
     //
-    // Allocator that aligns memory allocations for the given alignment using the default allocator, i.e. global `operator new()` with `std::align_val_t`.
+    // Allocator that aligns memory allocations for the given alignment using the default allocator, i.e. global `operator new()`
+    // with `std::align_val_t`.
     //ᅟ
     // Supports special alignment values such as `cache_line_alignment`.
     // Multiple alignment requirements can be combined using bitmask operations, e.g. `cache_line_alignment | alignof(T)`.
@@ -298,7 +300,8 @@ operator !=(page_allocator<T> x, page_allocator<U> y) noexcept
     // Large page allocator.
     //ᅟ
     // Uses transparent huge pages on Linux and explicit large page allocation on Windows.
-    // Note that processes on Windows need to obtain SeLockMemoryPrivilege in order to use large pages, cf. https://docs.microsoft.com/en-us/windows/win32/memory/large-page-support.
+    // Note that processes on Windows need to obtain SeLockMemoryPrivilege in order to use large pages,
+    // cf. https://docs.microsoft.com/en-us/windows/win32/memory/large-page-support.
     //
 template <typename T>
 class large_page_allocator
@@ -323,8 +326,8 @@ public:
     gsl_NODISCARD static constexpr bool
     provides_static_alignment(std::size_t a) noexcept
     {
-            // We cannot guarantee large-page alignment particularly on Linux because `large_page_alloc()` uses `mmap()` and `madvise()`,
-            // so we only promise page alignment here.
+            // We cannot guarantee large-page alignment particularly on Linux because `large_page_alloc()` uses `mmap()` and
+            // `madvise()`, so we only promise page alignment here.
         return sysmakeshift::provides_static_alignment(page_alignment, a);
     }
 
@@ -446,7 +449,8 @@ public:
 
 
     //
-    // Allocates an object of type `T` with the given allocator, constructs it with the given arguments and returns a `std::unique_ptr<>` to the object.
+    // Allocates an object of type `T` with the given allocator, constructs it with the given arguments and returns a
+    // `std::unique_ptr<>` to the object.
     //ᅟ
     //ᅟ    auto p = allocate_unique<float>(MyAllocator<float>{ }, 3.14159f);
     //ᅟ    // returns `std::unique_ptr<float, allocator_deleter<float, MyAllocator<float>>>`
@@ -463,7 +467,8 @@ allocate_unique(A alloc, ArgsT&&... args)
 }
 
     //
-    // Allocates a fixed-size array of type `ArrayT` with the given allocator, default-constructs the elements and returns a `std::unique_ptr<>` to the array.
+    // Allocates a fixed-size array of type `ArrayT` with the given allocator, default-constructs the elements and returns a
+    // `std::unique_ptr<>` to the array.
     //ᅟ
     //ᅟ    auto p = allocate_unique<float[42]>(MyAllocator<float>{ });
     //ᅟ    // returns `std::unique_ptr<float[42], allocator_deleter<float[42], MyAllocator<float>>>`
@@ -480,7 +485,8 @@ allocate_unique(A alloc)
 }
 
     //
-    // Allocates an array of type `ArrayT` with the given allocator, default-constructs the elements and returns a `std::unique_ptr<>` to the array.
+    // Allocates an array of type `ArrayT` with the given allocator, default-constructs the elements and returns a
+    // `std::unique_ptr<>` to the array.
     //ᅟ
     //ᅟ    auto p = allocate_unique<float[]>(MyAllocator<float>{ }, 42);
     //ᅟ    // returns `std::unique_ptr<float[], allocator_deleter<float[], MyAllocator<float>>>`
