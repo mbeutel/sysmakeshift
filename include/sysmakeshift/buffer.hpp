@@ -170,6 +170,7 @@ public:
             }
             data_ = std::exchange(rhs.data_, { });
             size_ = std::exchange(rhs.size_, { });
+            bytesPerElement_ = std::exchange(rhs.bytesPerElement_, 0);
         }
         return *this;
     }
