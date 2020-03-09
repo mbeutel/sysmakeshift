@@ -95,6 +95,7 @@ init_win32_cpu_info(void) noexcept
 } // namespace detail
 
 
+#if defined(_WIN32)
 std::size_t
 hardware_cache_line_size(void) noexcept
 {
@@ -118,6 +119,7 @@ physical_concurrency(void) noexcept
     }
     return physicalConcurrency;
 }
+#endif // defined(_WIN32)
 
 
 } // namespace sysmakeshift
