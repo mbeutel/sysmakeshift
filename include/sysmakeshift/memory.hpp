@@ -25,7 +25,7 @@ namespace gsl = ::gsl_lite;
 
 
     //
-    // Allocator adaptor that interposes construct() calls to convert value initialization into default initialization.
+    // Allocator adaptor that interposes `construct()` calls to convert value initialization into default initialization.
     //
 template <typename T, typename A = std::allocator<T>>
 class default_init_allocator : public A
