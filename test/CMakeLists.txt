@@ -22,10 +22,9 @@ target_link_libraries(test-sysmakeshift-runner
     PRIVATE
         Catch2::Catch2)
 
-# test targets
+# test target
 add_executable(test-sysmakeshift
     "test-buffer.cpp"
-    "test-fenv.cpp"
     "test-memory.cpp"
     "test-new.cpp"
     "test-thread.cpp"
@@ -34,8 +33,7 @@ add_executable(test-sysmakeshift
 # compiler settings
 cmakeshift_target_compile_settings(test-sysmakeshift
     PRIVATE
-        default
-        fp-model=strict) # to prevent our fenv tests from being broken by the optimizer
+        default)
 target_compile_features(test-sysmakeshift PRIVATE cxx_std_14)
 if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.16)
     target_precompile_headers(test-sysmakeshift
@@ -54,14 +52,6 @@ if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.16)
             # other libraries
             <gsl-lite/gsl-lite.hpp>
             <catch2/catch.hpp>)
-endif()
-if(MSVC)
-    if(CMAKE_CXX_FLAGS MATCHES "/EH[ascr]+")
-        string(REGEX REPLACE "/EH[ascr]+" "" CMAKE_CXX_FLAGS_NEW "${CMAKE_CXX_FLAGS}")
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS_NEW} /EHa") # /EHa needed for calling `_set_se_translator()`
-    endif()
-elseif(CMAKE_COMPILER_IS_GNUCXX)
-    target_compile_options(test-sysmakeshift PRIVATE -fnon-call-exceptions) # needed to permit throwing exceptions in signal handlers
 endif()
 
 # test properties
