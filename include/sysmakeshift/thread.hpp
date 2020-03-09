@@ -37,7 +37,6 @@ public:
     using std::thread::hardware_concurrency;
     using std::thread::join;
     using std::thread::joinable;
-    using std::thread::native_handle;
 
     template <typename F, typename... Ts>
     jthread(F&& func, Ts&&... args)
