@@ -1,4 +1,5 @@
 
+#include <atomic>
 #include <cstddef>   // for ptrdiff_t
 #include <memory>    // for unique_ptr<>
 #include <stdexcept> // for runtime_error
@@ -12,7 +13,6 @@
 #endif
 
 #include <sysmakeshift/detail/errors.hpp>
-#include <sysmakeshift/detail/cpuinfo.hpp>
 
 
 namespace sysmakeshift {
@@ -21,11 +21,21 @@ namespace detail {
 
 
 #if defined(_WIN32)
-win32_cpu_info const&
-get_win32_cpu_info(void) noexcept
+struct win32_cpu_info
 {
-    static win32_cpu_info result = []
+    std::atomic<std::size_t> cache_line_size;
+    std::atomic<unsigned> physical_concurrency;
+};
+
+static win32_cpu_info win32_cpu_info_value{ };
+
+void
+init_win32_cpu_info(void) noexcept
+{
+    auto initFunc = []
     {
+        std::size_t newCacheLineSize = 0;
+        unsigned newPhysicalConcurrency = 0;
         auto lresult = win32_cpu_info{ };
         std::unique_ptr<SYSTEM_LOGICAL_PROCESSOR_INFORMATION[]> dynSlpi;
         SYSTEM_LOGICAL_PROCESSOR_INFORMATION* pSlpi = nullptr;
@@ -42,31 +52,72 @@ get_win32_cpu_info(void) noexcept
         {
             if (pSlpi[i].Relationship == RelationProcessorCore)
             {
-                ++lresult.physical_concurrency;
+                ++newPhysicalConcurrency;
             }
             if (pSlpi[i].Relationship == RelationCache && pSlpi[i].Cache.Level == 1 && (pSlpi[i].Cache.Type == CacheData || pSlpi[i].Cache.Type == CacheUnified))
             {
-                if (lresult.cache_line_size == 0)
+                if (newCacheLineSize == 0)
                 {
-                    lresult.cache_line_size = pSlpi[i].Cache.LineSize;
+                    newCacheLineSize = pSlpi[i].Cache.LineSize;
                 }
-                else if (lresult.cache_line_size != pSlpi[i].Cache.LineSize)
+                else if (newCacheLineSize != pSlpi[i].Cache.LineSize)
                 {
                     throw std::runtime_error("GetLogicalProcessorInformation() reports different L1 cache line sizes for different cores"); // ...and we cannot handle that
                 }
             }
         }
-        if (lresult.cache_line_size == 0)
+        if (newCacheLineSize == 0)
         {
             throw std::runtime_error("GetLogicalProcessorInformation() did not report any L1 cache info");
         }
-        return lresult;
-    }();
-    return result;
+        if (newPhysicalConcurrency == 0)
+        {
+            throw std::runtime_error("GetLogicalProcessorInformation() did not report any processor cores");
+        }
+
+        win32_cpu_info_value.cache_line_size.store(newCacheLineSize, std::memory_order_relaxed);
+        win32_cpu_info_value.physical_concurrency.store(newPhysicalConcurrency, std::memory_order_relaxed);
+
+            // A release fence would be sufficient here, but we use sequential consistency by default to have other threads see
+            // the results of our hard work as soon as possible.
+        std::atomic_thread_fence(std::memory_order_seq_cst);
+    };
+
+    auto cacheLineSize = win32_cpu_info_value.cache_line_size.load(std::memory_order_relaxed);
+    if (cacheLineSize == 0)
+    {
+        initFunc();
+    }
 }
 #endif // defined(_WIN32)
 
 
 } // namespace detail
+
+
+std::size_t
+hardware_cache_line_size(void) noexcept
+{
+    auto cacheLineSize = detail::win32_cpu_info_value.cache_line_size.load(std::memory_order_relaxed);
+    if (cacheLineSize == 0)
+    {
+        detail::init_win32_cpu_info();
+        cacheLineSize = detail::win32_cpu_info_value.cache_line_size.load(std::memory_order_relaxed);
+    }
+    return cacheLineSize;
+}
+
+unsigned
+physical_concurrency(void) noexcept
+{
+    auto physicalConcurrency = detail::win32_cpu_info_value.physical_concurrency.load(std::memory_order_relaxed);
+    if (physicalConcurrency == 0)
+    {
+        detail::init_win32_cpu_info();
+        physicalConcurrency = detail::win32_cpu_info_value.physical_concurrency.load(std::memory_order_relaxed);
+    }
+    return physicalConcurrency;
+}
+
 
 } // namespace sysmakeshift

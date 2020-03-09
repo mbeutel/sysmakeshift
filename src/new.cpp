@@ -1,4 +1,5 @@
 ﻿
+#include <atomic>
 #include <cstdio>
 #include <cstdlib>   // for sscanf()
 #include <cstddef>   // for size_t
@@ -14,7 +15,7 @@
 #include <sysmakeshift/memory.hpp>
 
 #include <sysmakeshift/detail/errors.hpp>
-#include <sysmakeshift/detail/cpuinfo.hpp>
+#include <sysmakeshift/detail/lazy-init.hpp>
 
 #if defined(_WIN32)
 # ifndef NOMINMAX
@@ -37,10 +38,13 @@
 namespace sysmakeshift {
 
 
+static std::atomic<std::size_t>
+hardware_large_page_size_value = std::size_t(-1);
+
 std::size_t
 hardware_large_page_size(void) noexcept
 {
-    static std::size_t result = []
+    static constexpr auto initFunc = []
     {
 #if defined(_WIN32)
         return GetLargePageMinimum();
@@ -72,14 +76,18 @@ hardware_large_page_size(void) noexcept
 #else
 # error Unsupported operating system.
 #endif
-    }();
-    return result;
+    };
+    return detail::lazy_init(hardware_large_page_size_value, std::size_t(-1), initFunc);
 }
+
+
+static std::atomic<std::size_t>
+hardware_page_size_value = std::size_t(-1);
 
 std::size_t
 hardware_page_size(void) noexcept
 {
-    static std::size_t result = []
+    static constexpr auto initFunc = []
     {
 #if defined(_WIN32)
         SYSTEM_INFO sysInfo;
@@ -92,17 +100,18 @@ hardware_page_size(void) noexcept
 #else
 # error Unsupported operating system.
 #endif
-    }();
-    return result;
+    };
+    return detail::lazy_init(hardware_page_size_value, std::size_t(-1), initFunc);
 }
+
+#if !defined(_WIN32) // `hardware_cache_line_size()` for Windows is defined in cpuinfo.cpp
+static std::atomic<std::size_t>
+hardware_cache_line_size_value = std::size_t(-1);
 
 std::size_t
 hardware_cache_line_size(void) noexcept
 {
-#if defined(_WIN32)
-    return detail::get_win32_cpu_info().cache_line_size;
-#else // ^^^ defined(_WIN32) ^^^ / vvv !defined(_WIN32) vvv
-    static std::size_t result = []
+    static constexpr auto initFunc = []
     {
 # if defined(__linux__)
         long result = 0;
@@ -125,10 +134,10 @@ hardware_cache_line_size(void) noexcept
 # else
 #  error Unsupported operating system.
 # endif
-    }();
-    return result;
-#endif // defined(_WIN32)
+    };
+    return detail::lazy_init(hardware_cache_line_size_value, std::size_t(-1), initFunc);
 }
+#endif // !defined(_WIN32)
 
 
 } // namespace sysmakeshift

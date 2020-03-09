@@ -10,7 +10,7 @@
 
 #include <sysmakeshift/thread.hpp>
 
-#include <sysmakeshift/detail/cpuinfo.hpp>
+#include <sysmakeshift/detail/lazy-init.hpp>
 
 #if defined(_WIN32)
 #elif defined(__linux__)
@@ -72,13 +72,14 @@ count_duplicates(InIt first, InIt last)
 #endif // defined(__linux__)
 
 
+#if !defined(_WIN32) // `physical_concurrency()` for Windows is defined in cpuinfo.cpp
+static std::atomic<unsigned>
+physical_concurrency_value = unsigned(-1);
+
 unsigned
 physical_concurrency(void) noexcept
 {
-#if defined(_WIN32)
-    return detail::get_win32_cpu_info().physical_concurrency;
-#else // ^^^ defined(_WIN32) ^^^ / vvv !defined(_WIN32) vvv
-    static unsigned result = []
+    static constexpr auto initFunc = []
     {
 # if defined(__linux__)
             // I can't believe that parsing /proc/cpuinfo is the accepted way to query the number of physical cores.
@@ -128,10 +129,10 @@ physical_concurrency(void) noexcept
 # else
 #  error Unsupported operating system.
 # endif
-    }();
-    return result;
-#endif // defined(_WIN32)
+    };
+    return detail::lazy_init(physical_concurrency_value, unsigned(-1), initFunc);
 }
+#endif // !defined(_WIN32)
 
 
 } // namespace sysmakeshift
