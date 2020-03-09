@@ -4,7 +4,7 @@
 
 
 #include <new>          // for bad_alloc
-#include <memory>       // for unique_ptr<>, allocator<>, allocator_traits<>
+#include <memory>       // for unique_ptr<>, allocator_traits<>
 #include <cstddef>      // for size_t, ptrdiff_t
 #include <utility>      // for move(), forward<>(), exchange(), in_place (C++17)
 #include <type_traits>  // for is_const<>, is_volatile<>, is_reference<>, is_nothrow_constructible<>, enable_if<>
@@ -12,7 +12,7 @@
 
 #include <gsl-lite/gsl-lite.hpp> // for gsl_Expects(), owner<>, span<>, negation<>, gsl_NODISCARD, gsl_CPP17_OR_GREATER
 
-#include <sysmakeshift/memory.hpp> // for aligned_allocator_adaptor<>
+#include <sysmakeshift/memory.hpp> // for aligned_allocator<>, aligned_allocator_adaptor<>
 
 #include <sysmakeshift/detail/arithmetic.hpp>  // for try_multiply_unsigned(), try_ceili()
 #include <sysmakeshift/detail/buffer.hpp>
@@ -34,7 +34,7 @@ namespace gsl = ::gsl_lite;
     // Supports special alignment values such as `cache_line_alignment`.
     // Multiple alignment requirements can be combined using bitmask operations, e.g. `cache_line_alignment | alignof(T)`.
     //
-template <typename T, std::size_t Alignment, typename A = std::allocator<T>>
+template <typename T, std::size_t Alignment, typename A = aligned_allocator<T, Alignment>>
 class aligned_buffer : private aligned_allocator_adaptor<T, Alignment | alignof(T), A>
 {
     static_assert(!std::is_const<T>::value && !std::is_volatile<T>::value, "buffer element type must not have cv qualifiers");
@@ -272,7 +272,7 @@ public:
     // Supports special alignment values such as `cache_line_alignment`.
     // Multiple alignment requirements can be combined using bitmask operations, e.g. `cache_line_alignment | alignof(T)`.
     //
-template <typename T, std::size_t Alignment, typename A = std::allocator<T>>
+template <typename T, std::size_t Alignment, typename A = aligned_allocator<T, Alignment>>
 class aligned_row_buffer : private aligned_allocator_adaptor<T, Alignment | alignof(T), A>
 {
     static_assert(!std::is_const<T>::value && !std::is_volatile<T>::value, "buffer element type must not have cv qualifiers");
