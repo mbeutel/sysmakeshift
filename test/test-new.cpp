@@ -3,7 +3,7 @@
 
 #include <iostream>
 
-#include <catch2/catch.hpp>
+#include <catch2/catch_test_macros.hpp>
 
 
 constexpr bool is_power_of_2(std::size_t value) noexcept

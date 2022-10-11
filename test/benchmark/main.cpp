@@ -1,6 +1,5 @@
 
-#define CATCH_CONFIG_RUNNER
-#include <catch2/catch.hpp>
+#include <catch2/catch_session.hpp>
 
 #include "params.hpp"
 
@@ -14,7 +13,7 @@ int main(int argc, char* argv[])
 
     auto cli
         = session.cli()
-        | Catch::clara::Opt(global_benchmark_params.num_threads, "n")
+        | Catch::Clara::Opt(global_benchmark_params.num_threads, "n")
         ["--num-threads"]
         ("number of threads to use in thread_squad benchmarks");
 

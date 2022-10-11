@@ -5,6 +5,8 @@
 
 #include <thread>
 
+#include <gsl-lite/gsl-lite.hpp> // for gsl_NODISCARD
+
 
 namespace sysmakeshift {
 
@@ -16,7 +18,7 @@ namespace sysmakeshift {
     // On systems with simultaneous multithreading ("hyper-threading") enabled, `std::thread::hardware_concurrency()` typically
     // returns some multiple of `physical_concurrency()`.
     //
-unsigned
+gsl_NODISCARD unsigned
 physical_concurrency(void) noexcept;
 
 

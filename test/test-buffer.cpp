@@ -3,7 +3,9 @@
 
 #include <gsl-lite/gsl-lite.hpp> // for gsl_CPP17_OR_GREATER
 
-#include <catch2/catch.hpp>
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
+#include <catch2/generators/catch_generators_range.hpp>
 
 
 namespace {

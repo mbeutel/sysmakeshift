@@ -76,7 +76,7 @@ count_duplicates(InIt first, InIt last)
 static std::atomic<unsigned>
 physical_concurrency_value = unsigned(-1);
 
-unsigned
+gsl_NODISCARD unsigned
 physical_concurrency(void) noexcept
 {
     static constexpr auto initFunc = []

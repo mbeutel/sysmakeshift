@@ -4,12 +4,11 @@
 # sysmakeshift library target
 
 
-cmake_minimum_required(VERSION 3.14)
+cmake_minimum_required(VERSION 3.20)
 
 # dependencies
-find_package(CMakeshift 3.8 REQUIRED)
 find_package(Threads REQUIRED)
-find_package(gsl-lite 0.36 REQUIRED)
+find_package(gsl-lite 0.40 REQUIRED)
 
 # library target
 add_library(sysmakeshift STATIC
@@ -18,51 +17,55 @@ add_library(sysmakeshift STATIC
     "memory.cpp"
     "new.cpp"
     "thread.cpp"
-    "thread_squad.cpp")
+    "thread_squad.cpp"
+)
 
 # library properties
 target_include_directories(sysmakeshift
     PUBLIC
         "$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>"
-        "$<INSTALL_INTERFACE:include>")
+        "$<INSTALL_INTERFACE:include>"
+)
 target_compile_features(sysmakeshift
     INTERFACE
         cxx_std_14
     PRIVATE
-        cxx_std_17)
+        cxx_std_17
+)
 
 # compiler settings
-include(CMakeshift/TargetCompileSettings)
+include(TargetCompileSettings)
 cmakeshift_target_compile_settings(sysmakeshift
+    SOURCE_FILE_ENCODING "UTF-8"
+)
+target_precompile_headers(sysmakeshift
     PRIVATE
-        default)
-if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.16)
-    target_precompile_headers(sysmakeshift
-        PRIVATE
-            # C standard library
-            <cstddef>
-            # C++ standard library
-            <new>
-            <memory>
-            <string>
-            <utility>
-            <exception>
-            <algorithm>
-            <type_traits>
-            <system_error>
-            # other libraries
-            <gsl-lite/gsl-lite.hpp>)
-endif()
+        # C standard library
+        <cstddef>
+        # C++ standard library
+        <new>
+        <memory>
+        <string>
+        <utility>
+        <exception>
+        <algorithm>
+        <type_traits>
+        <system_error>
+        # other libraries
+        <gsl-lite/gsl-lite.hpp>
+)
 
 if(MSVC)
     target_compile_definitions(sysmakeshift
         PRIVATE
             WIN32_LEAN_AND_MEAN
-            NOMINMAX)
+            NOMINMAX
+    )
     if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.16)
         target_precompile_headers(sysmakeshift
             PRIVATE
-                <Windows.h>)
+                <Windows.h>
+        )
     endif()
 endif()
 
@@ -70,21 +73,25 @@ if (NOT MSVC AND CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     # Sized deallocation must be explicitly enabled on Clang, cf. https://bcain-llvm.readthedocs.io/projects/clang/en/release_37/ReleaseNotes/#new-compiler-flags.
     target_compile_options(sysmakeshift
         PRIVATE
-            -fsized-deallocation)
+            -fsized-deallocation
+    )
 endif()
 
 # library dependencies
 target_link_libraries(sysmakeshift
     PUBLIC
         Threads::Threads
-        gsl::gsl-lite-v1)
+        gsl::gsl-lite-v1
+)
 
 # installation: public header files, target
 install(
     DIRECTORY
         "${PROJECT_SOURCE_DIR}/include/" # the trailing '/' is significant
-    TYPE INCLUDE)
+    TYPE INCLUDE
+)
 install(
     TARGETS sysmakeshift
     EXPORT sysmakeshift
-    ARCHIVE INCLUDES)
+    ARCHIVE INCLUDES
+)

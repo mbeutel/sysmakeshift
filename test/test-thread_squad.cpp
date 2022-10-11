@@ -7,7 +7,9 @@
 #include <unordered_set>
 #include <unordered_map>
 
-#include <catch2/catch.hpp>
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
+#include <catch2/generators/catch_generators_range.hpp>
 
 
 #if defined(_WIN32) || defined(__linux__)
