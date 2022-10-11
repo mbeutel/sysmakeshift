@@ -12,93 +12,95 @@ resources:
       type: github
       name: mbeutel/CImakeshift
       endpoint: mbeutel
-      #ref: refs/tags/0.2
 
 jobs:
 - template: azure-pipelines/cmake.yml@CImakeshift
   parameters:
-    vcpkgRef: 5deea3b975fe62990973d73a102de818d83ba20c
-    vcpkgOverlayRepo: 'https://mp-force.ziti.uni-heidelberg.de/asc/infrastructure/vcpkg-ports.git'
-    vcpkgOverlayRef: 10fe870259f4d716b83cc3792710b47d6b407b16
-    vcpkgPackages: ['cmakeshift', 'gsl-lite', 'catch2']
+    vcpkgRef: 42cc830d874f8e24eb4eb05bd5bb28496e3d498c
+      
+    cmakeConfigArgs: '-DBUILD_TESTING=ON -DBUILD_BENCHMARKS=ON'
 
     cmakeBuildConfigurations: [Debug]
-    cmakeConfigArgs: '-DSYSMAKESHIFT_BUILD_TESTS=ON'
 
     targets:
 
     - os: Windows
       cxxCompiler: MSVC
-      cxxCompilerVersions: [19_1, 19_2]
+      cxxCompilerVersions: [VS2019, VS2022]
       platforms: [x86, x64]
 
     - os: Windows
       cxxCompiler: MSVC
-      cxxCompilerVersions: [19_2]
+      cxxCompilerVersions: [VS2022]
       platforms: [x86, x64]
+      tag: 'optimized'
       cmakeBuildConfigurations: [Release]
 
     - os: Windows
       cxxCompiler: Clang
-      cxxCompilerVersions: [9]
+      cxxCompilerVersions: [VS2019, VS2022]
       platforms: [x86, x64]
 
     - os: Linux
       cxxCompiler: GCC
-      cxxCompilerVersions: [7, 8]
+      cxxCompilerVersions: [10]
       platforms: [x64]
 
     - os: Linux
       cxxCompiler: GCC
-      cxxCompilerVersions: [9]
+      cxxCompilerVersions: [12]
       platforms: [x64]
+      cxxStandardLibraryDebugMode: true
+      cxxSanitizers: [AddressSanitizer, UndefinedBehaviorSanitizer]
+      tag: 'sanitize'
+
+    - os: Linux
+      cxxCompiler: GCC
+      cxxCompilerVersions: [12]
+      platforms: [x64]
+      tag: 'optimized'
       cmakeBuildConfigurations: [Release]
 
     - os: Linux
-      cxxCompiler: GCC
-      cxxCompilerVersions: [9]
+      cxxCompiler: Clang
+      cxxCompilerVersions: [12]
       platforms: [x64]
-      vcpkgTriplet: <platform>-<os>-sanitize
-      cmakeConfigArgs: '<cmakeConfigArgs> -DCMAKESHIFT_PRIVATE_COMPILE_SETTINGS=runtime-checks;debug-stdlib'
+
+    - os: Linux
+      cxxCompiler: Clang
+      cxxCompilerVersions: [14]
+      platforms: [x64]
+      cxxStandardLibraryDebugMode: true
+      cxxSanitizers: [AddressSanitizer, UndefinedBehaviorSanitizer, ImplicitIntegerArithmeticValueChange]
       tag: 'sanitize'
 
     - os: Linux
       cxxCompiler: Clang
-      cxxCompilerVersions: [5, 6, 7, 8]
+      cxxCompilerVersions: [14]
       platforms: [x64]
-
-    - os: Linux
-      cxxCompiler: Clang
-      cxxCompilerVersions: [9]
-      platforms: [x64]
+      tag: 'optimized'
       cmakeBuildConfigurations: [Release]
-
-    - os: Linux
-      cxxCompiler: Clang
-      cxxCompilerVersions: [9]
-      platforms: [x64]
-      vcpkgTriplet: <platform>-<os>-sanitize
-      cmakeConfigArgs: '<cmakeConfigArgs> -DCMAKESHIFT_PRIVATE_COMPILE_SETTINGS=runtime-checks;debug-stdlib'
-      tag: 'sanitize'
 
     - os: MacOS
       cxxCompiler: GCC
-      cxxCompilerVersions: [7, 8, 9]
+      cxxCompilerVersions: [10, 12]
       platforms: [x64]
 
     - os: MacOS
       cxxCompiler: GCC
-      cxxCompilerVersions: [9]
+      cxxCompilerVersions: [12]
       platforms: [x64]
+      tag: 'optimized'
       cmakeBuildConfigurations: [Release]
 
     - os: MacOS
       cxxCompiler: AppleClang
-      cxxCompilerVersions: [10, 10_0_1, 11]
+      cxxCompilerVersions: [13_1_6, 14]
       platforms: [x64]
 
     - os: MacOS
       cxxCompiler: AppleClang
-      cxxCompilerVersions: [11]
+      cxxCompilerVersions: [14]
       platforms: [x64]
+      tag: 'optimized'
       cmakeBuildConfigurations: [Release]
