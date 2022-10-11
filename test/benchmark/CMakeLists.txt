@@ -38,10 +38,6 @@ target_include_directories(benchmark-sysmakeshift
 cmakeshift_target_compile_settings(benchmark-sysmakeshift
     SOURCE_FILE_ENCODING "UTF-8"
 )
-target_compile_definitions(benchmark-sysmakeshift
-    PRIVATE
-        CATCH_CONFIG_ENABLE_BENCHMARKING
-)
 target_compile_features(benchmark-sysmakeshift PRIVATE cxx_std_14)
 
 # benchmark properties
