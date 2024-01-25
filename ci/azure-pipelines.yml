@@ -18,7 +18,7 @@ jobs:
   parameters:
     vcpkgRef: 42cc830d874f8e24eb4eb05bd5bb28496e3d498c
       
-    cmakeConfigArgs: '-DBUILD_TESTING=ON -DBUILD_BENCHMARKS=ON'
+    cmakeConfigArgs: '-DSYSMAKESHIFT_BUILD_TESTING=ON -DSYSMAKESHIFT_BUILD_BENCHMARKS=ON'
 
     cmakeBuildConfigurations: [Debug]
 

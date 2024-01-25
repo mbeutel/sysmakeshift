@@ -13,16 +13,16 @@ project(sysmakeshift
 list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
 
 # Define build options.
-option(BUILD_TESTING "Build tests" OFF)
-option(BUILD_BENCHMARKS "Build benchmarks" OFF)
+option(SYSMAKESHIFT_BUILD_TESTING "Build tests" OFF)
+option(SYSMAKESHIFT_BUILD_BENCHMARKS "Build benchmarks" OFF)
 
 # Include target definitions.
 add_subdirectory(src)
-if(BUILD_TESTING)
+if(SYSMAKESHIFT_BUILD_TESTING)
     enable_testing()
     add_subdirectory(test)
 endif()
-if(BUILD_BENCHMARKS)
+if(SYSMAKESHIFT_BUILD_BENCHMARKS)
     add_subdirectory(test/benchmark)
 endif()
 
