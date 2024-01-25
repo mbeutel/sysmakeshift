@@ -19,6 +19,7 @@ add_library(sysmakeshift STATIC
     "thread.cpp"
     "thread_squad.cpp"
 )
+add_library(sysmakeshift::sysmakeshift ALIAS sysmakeshift)
 
 # library properties
 target_include_directories(sysmakeshift
