@@ -5,7 +5,7 @@
 
 #include <thread>
 
-#include <gsl-lite/gsl-lite.hpp> // for gsl_NODISCARD
+#include <gsl-lite/gsl-lite.hpp> // for span<>, gsl_NODISCARD
 
 
 namespace sysmakeshift {
@@ -18,8 +18,18 @@ namespace sysmakeshift {
     // On systems with simultaneous multithreading ("hyper-threading") enabled, `std::thread::hardware_concurrency()` typically
     // returns some multiple of `physical_concurrency()`.
     //
-gsl_NODISCARD unsigned
+gsl_NODISCARD int
 physical_concurrency(void) noexcept;
+
+
+    //
+    // Returns a list of thread ids, where each thread is situated on a distinct physical core. Can be used to select thread
+    // affinity if no simultaneous multithreading ("hyper-threading") is desired.
+    //
+    // Returns an empty span if thread affinity is not supported by the OS.
+    //
+gsl_NODISCARD gsl::span<int const>
+physical_core_ids(void) noexcept;
 
 
     //
