@@ -41,7 +41,7 @@ struct cpu_info
 #if defined(_WIN32)
     std::atomic<std::size_t> cache_line_size;
 #endif // defined(_WIN32)
-    std::atomic<int> physical_concurrency;
+    std::atomic<unsigned> physical_concurrency;
 
 #if defined(_WIN32) || defined(__linux__)
     std::atomic<int const*> core_thread_ids_ptr;
@@ -96,7 +96,7 @@ init_cpu_info(void) noexcept
     auto initFunc = []
     {
         std::size_t newCacheLineSize = 0;
-        int newPhysicalConcurrency = 0;
+        unsigned newPhysicalConcurrency = 0;
         std::vector<int> coreThreadIds;
         auto lresult = cpu_info{ };
 
@@ -193,7 +193,7 @@ init_cpu_info(void) noexcept
 
         std::sort(ids.begin(), ids.end());
         auto numUnique = std::unique(ids.begin(), ids.end()) - ids.begin();
-        newPhysicalConcurrency = gsl::narrow<int>(numUnique);
+        newPhysicalConcurrency = gsl::narrow<unsigned>(numUnique);
 
         coreThreadIds.resize(numUnique);
         std::transform(
@@ -204,9 +204,11 @@ init_cpu_info(void) noexcept
                 return id.processor;
             });
 #elif defined(__APPLE__)
-        std::size_t nbResult = sizeof newPhysicalConcurrency;
-        int ec = sysctlbyname("hw.physicalcpu", &newPhysicalConcurrency, &nbResult, 0, 0);
+        int result = 0;
+        std::size_t nbResult = sizeof result;
+        int ec = sysctlbyname("hw.physicalcpu", &result, &nbResult, 0, 0);
         if (ec != 0) throw std::runtime_error("cannot query hw.physicalcpu");
+        newPhysicalConcurrency = gsl::narrow<unsigned>(result);
 #else
 # error Unsupported operating system.
 #endif
@@ -250,7 +252,7 @@ hardware_cache_line_size(void) noexcept
 }
 #endif // defined(_WIN32)
 
-int
+unsigned
 physical_concurrency(void) noexcept
 {
     auto physicalConcurrency = detail::cpu_info_value.physical_concurrency.load(std::memory_order_relaxed);

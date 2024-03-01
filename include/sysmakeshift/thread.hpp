@@ -18,7 +18,7 @@ namespace sysmakeshift {
     // On systems with simultaneous multithreading ("hyper-threading") enabled, `std::thread::hardware_concurrency()` typically
     // returns some multiple of `physical_concurrency()`.
     //
-gsl_NODISCARD int
+gsl_NODISCARD unsigned
 physical_concurrency(void) noexcept;
 
 
