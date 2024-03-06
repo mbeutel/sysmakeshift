@@ -55,7 +55,7 @@ struct physical_core_id
 {
     int core_id;
     int physical_id;
-    int processor;  // payload
+    int processor;
 
     friend bool operator ==(physical_core_id const& lhs, physical_core_id const& rhs)
     {
@@ -63,8 +63,11 @@ struct physical_core_id
     }
     friend bool operator <(physical_core_id const& lhs, physical_core_id const& rhs)
     {
-        return lhs.core_id < rhs.core_id
-            || (lhs.core_id == rhs.core_id && lhs.physical_id < rhs.physical_id);
+        if (lhs.core_id < rhs.core_id) return true;
+        if (lhs.core_id > rhs.core_id) return false;
+        if (lhs.physical_id < rhs.physical_id) return true;
+        if (lhs.physical_id > rhs.physical_id) return false;
+        return lhs.processor < rhs.processor;
     }
 };
 #endif // defined(__linux__)
@@ -203,6 +206,7 @@ init_cpu_info(void) noexcept
             {
                 return id.processor;
             });
+        std::sort(coreThreadIds.begin(), coreThreadIds.end());
 #elif defined(__APPLE__)
         int result = 0;
         std::size_t nbResult = sizeof result;
