@@ -200,7 +200,7 @@ init_cpu_info(void) noexcept
 
         coreThreadIds.resize(numUnique);
         std::transform(
-            ids.begin(), ids.end(),
+            ids.begin(), ids.begin() + numUnique,
             coreThreadIds.begin(),
             [](physical_core_id const& id)
             {
