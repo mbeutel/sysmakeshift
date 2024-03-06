@@ -227,8 +227,8 @@ init_cpu_info(void) noexcept
         std::atomic_thread_fence(std::memory_order_seq_cst);
     };
 
-    auto cacheLineSize = cpu_info_value.cache_line_size.load(std::memory_order_relaxed);
-    if (cacheLineSize == 0)
+    auto physicalConcurrency = cpu_info_value.physical_concurrency.load(std::memory_order_relaxed);
+    if (physicalConcurrency == 0)
     {
         initFunc();
     }
