@@ -215,12 +215,14 @@ init_cpu_info(void) noexcept
 
         cpu_info_value.physical_concurrency.store(newPhysicalConcurrency, std::memory_order_relaxed);
 
+#if defined(_WIN32) || defined(__linux__)
         int const* expectedPtr = nullptr;
         int const* desiredPtr = coreThreadIds.data();
         if (cpu_info_value.core_thread_ids_ptr.compare_exchange_strong(expectedPtr, desiredPtr))
         {
             cpu_info_value.core_thread_ids = std::move(coreThreadIds);
         }
+#endif // defined(_WIN32) || defined(__linux__)
 
             // A release fence would be sufficient here, but we use sequential consistency by default to have other threads see
             // the results of our hard work as soon as possible.
