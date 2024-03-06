@@ -16,7 +16,6 @@ add_library(sysmakeshift STATIC
     "errors.cpp"
     "memory.cpp"
     "new.cpp"
-    "thread.cpp"
     "thread_squad.cpp"
 )
 add_library(sysmakeshift::sysmakeshift ALIAS sysmakeshift)

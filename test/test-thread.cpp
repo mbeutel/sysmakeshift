@@ -10,7 +10,7 @@
 
 TEST_CASE("physical_concurrency() returns correct value")
 {
-    unsigned physicalConcurrency = sysmakeshift::physical_concurrency();
+    int physicalConcurrency = sysmakeshift::physical_concurrency();
     std::cout << "Hardware concurrency: " << std::thread::hardware_concurrency() << " cores\n";
     std::cout << "Physical concurrency: " << physicalConcurrency << " cores\n";
 
