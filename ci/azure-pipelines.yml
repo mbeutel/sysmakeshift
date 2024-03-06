@@ -26,15 +26,29 @@ jobs:
 
     - os: Windows
       cxxCompiler: MSVC
-      cxxCompilerVersions: [VS2019, VS2022]
-      platforms: [x86, x64]
-
-    - os: Windows
-      cxxCompiler: MSVC
       cxxCompilerVersions: [VS2022]
       platforms: [x86, x64]
       tag: 'optimized'
       cmakeBuildConfigurations: [Release]
+
+    - os: Linux
+      cxxCompiler: GCC
+      cxxCompilerVersions: [13]
+      platforms: [x64]
+      tag: 'optimized'
+      cmakeBuildConfigurations: [Release]
+
+    - os: MacOS
+      cxxCompiler: AppleClang
+      cxxCompilerVersions: [15_2]
+      platforms: [x64]
+      tag: 'optimized'
+      cmakeBuildConfigurations: [Release]
+
+    - os: Windows
+      cxxCompiler: MSVC
+      cxxCompilerVersions: [VS2019, VS2022]
+      platforms: [x86, x64]
 
     - os: Windows
       cxxCompiler: Clang
@@ -53,13 +67,6 @@ jobs:
       cxxStandardLibraryDebugMode: true
       cxxSanitizers: [AddressSanitizer, UndefinedBehaviorSanitizer]
       tag: 'sanitize'
-
-    - os: Linux
-      cxxCompiler: GCC
-      cxxCompilerVersions: [13]
-      platforms: [x64]
-      tag: 'optimized'
-      cmakeBuildConfigurations: [Release]
 
     - os: Linux
       cxxCompiler: Clang
@@ -97,10 +104,3 @@ jobs:
       cxxCompiler: AppleClang
       cxxCompilerVersions: [14, 15_2]
       platforms: [x64]
-
-    - os: MacOS
-      cxxCompiler: AppleClang
-      cxxCompilerVersions: [15_2]
-      platforms: [x64]
-      tag: 'optimized'
-      cmakeBuildConfigurations: [Release]
