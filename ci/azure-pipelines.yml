@@ -16,7 +16,7 @@ resources:
 jobs:
 - template: azure-pipelines/cmake.yml@CImakeshift
   parameters:
-    vcpkgRef: ba2298b26ce17b5248685d30b359185485413674
+    vcpkgRef: fc6345e114c2e2c4f9714037340ccb08326b3e8c
       
     cmakeConfigArgs: '-DSYSMAKESHIFT_BUILD_TESTING=ON -DSYSMAKESHIFT_BUILD_BENCHMARKS=ON'
 
