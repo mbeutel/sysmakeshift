@@ -4,6 +4,7 @@
 
 
 #include <limits>
+#include <cstdint>     // for uint32_t
 #include <cstddef>     // for size_t, ptrdiff_t, max_align_t
 #include <utility>     // for forward<>()
 #include <type_traits> // for integral_constant<>, declval<>()
@@ -157,6 +158,11 @@ allocate_array(A& alloc, SizeC sizeC)
 }
 
 
+void
+set_out_of_bounds_write_trap(void* data, std::size_t size, std::size_t allocSize) noexcept;
+[[nodiscard]] bool
+check_out_of_bounds_write_trap(void const* data, std::size_t size, std::size_t allocSize) noexcept;
+
 void*
 aligned_alloc(std::size_t size, std::size_t alignment);
 void
@@ -191,20 +197,22 @@ public:
     allocate(std::size_t n)
     {
         std::size_t a = detail::alignment_in_bytes(Alignment | alignof(T));
-        if (n >= std::numeric_limits<std::size_t>::max() / sizeof(T)) throw std::bad_alloc{ }; // overflow
+        if (n >= std::numeric_limits<std::size_t>::max() / sizeof(T)) throw std::bad_alloc{ };  // overflow
         std::size_t nbData = n * sizeof(T);
-        std::size_t nbAlloc = nbData + a + sizeof(void*) - 1;
-        if (nbAlloc < nbData) throw std::bad_alloc{ }; // overflow
+        std::size_t nbAlloc = nbData + a + sizeof(void*) - 1 + 2*sizeof(std::uint32_t);
+        if (nbAlloc < nbData) throw std::bad_alloc{ };  // overflow
 
         using ByteAllocator = typename std::allocator_traits<A>::template rebind_alloc<char>;
         auto byteAllocator = ByteAllocator(*this); // may not throw
         void* mem = std::allocator_traits<ByteAllocator>::allocate(byteAllocator, nbAlloc);
         void* alignedMem = mem;
         void* alignResult = std::align(a, nbData + sizeof(void*), alignedMem, nbAlloc);
-        gsl_Expects(alignResult != nullptr && nbAlloc >= nbData + sizeof(void*)); // should not happen
+        gsl_Expects(alignResult != nullptr && nbAlloc >= nbData + sizeof(void*));  // should not happen
 
             // Store pointer to actual allocation at end of buffer. Use `memcpy()` so we don't have to worry about alignment.
-        std::memcpy(static_cast<char*>(alignResult) + nbData, &mem, sizeof(void*));
+        std::memcpy(static_cast<char*>(alignResult) + nbData + 2*sizeof(std::uint32_t), &mem, sizeof(void*));
+
+        detail::set_out_of_bounds_write_trap(alignResult, nbData, nbData + 2*sizeof(std::uint32_t));
 
         return static_cast<T*>(alignResult);
     }
@@ -212,12 +220,17 @@ public:
     deallocate(T* ptr, std::size_t n) noexcept
     {
         std::size_t a = detail::alignment_in_bytes(Alignment | alignof(T));
-        std::size_t nbData = n * sizeof(T); // cannot overflow due to preceding check in `allocate()`
-        std::size_t nbAlloc = nbData + a + sizeof(void*) - 1; // cannot overflow due to preceding check in `allocate()`
+        std::size_t nbData = n * sizeof(T);  // cannot overflow due to preceding check in `allocate()`
+        std::size_t nbAlloc = nbData + a + sizeof(void*) - 1 +  + 2*sizeof(std::uint32_t);  // cannot overflow due to preceding check in `allocate()`
 
             // Retrieve pointer to actual allocation from end of buffer. Use `memcpy()` so we don't have to worry about alignment.
         void* mem;
-        std::memcpy(&mem, reinterpret_cast<char*>(ptr) + nbData, sizeof(void*));
+        std::memcpy(&mem, reinterpret_cast<char*>(ptr) + nbData + 2*sizeof(std::uint32_t), sizeof(void*));
+
+        if (!detail::check_out_of_bounds_write_trap(ptr, nbData, nbData + 2*sizeof(std::uint32_t)))
+        {
+            gsl_FailFast();  // an out-of-bounds write has damaged this allocation
+        }
 
         using ByteAllocator = typename std::allocator_traits<A>::template rebind_alloc<char>;
         auto byteAllocator = ByteAllocator(*this); // may not throw

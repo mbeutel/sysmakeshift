@@ -2,7 +2,7 @@
 #include <new>          // for operator new, bad_alloc
 #include <cerrno>
 #include <cstddef>      // for size_t, align_val_t
-#include <algorithm>    // for max()
+#include <algorithm>    // for min(), max()
 #include <system_error>
 
 #ifdef _WIN32
@@ -12,16 +12,50 @@
 # include <sys/mman.h> // for mmap(), munmap(), madvise()
 #endif
 
+#include <gsl-lite/gsl-lite.hpp>  // for gsl_Assert(), gsl_FailFast()
+
 #include <sysmakeshift/new.hpp>    // for hardware_large_page_size(), hardware_page_size(), hardware_cache_line_size()
 #include <sysmakeshift/memory.hpp>
 
 #include <sysmakeshift/detail/arithmetic.hpp> // for try_ceili()
 #include <sysmakeshift/detail/errors.hpp>
 
+
 namespace sysmakeshift {
 
 namespace detail {
 
+
+constexpr std::size_t maxTrapCount = 4;
+constexpr std::uint32_t trapVal = 0xDEADBEEFu;
+void
+set_out_of_bounds_write_trap(void* data, std::size_t size, std::size_t allocSize) noexcept
+{
+    std::uint32_t ltrapVal = trapVal;
+
+        // Store known data pattern to just-out-of-bounds area.
+    std::size_t trapCount = std::min(maxTrapCount, (allocSize - size)/sizeof(std::uint32_t));
+    for (std::size_t i = 0; i < trapCount; ++i)
+    {
+        std::memcpy(static_cast<char*>(data) + size + i*sizeof(std::uint32_t), &ltrapVal, sizeof(std::uint32_t));
+    }
+}
+[[nodiscard]] bool
+check_out_of_bounds_write_trap(void const* data, std::size_t size, std::size_t allocSize) noexcept
+{
+        // Check known data pattern in just-out-of-bounds area to detect inadvertent tampering (poor man's ASan).
+    std::size_t trapCount = std::min(maxTrapCount, (allocSize - size)/sizeof(std::uint32_t));
+    for (std::size_t i = 0; i < trapCount; ++i)
+    {
+        std::uint32_t observedVal;
+        std::memcpy(&observedVal, static_cast<char const*>(data) + size + i*sizeof(std::uint32_t), sizeof(std::uint32_t));
+        if (observedVal != trapVal)
+        {
+            return false;  // an out-of-bounds write has damaged this allocation
+        }
+    }
+    return true;
+}
 
 void*
 aligned_alloc(std::size_t size, std::size_t alignment)
@@ -37,83 +71,101 @@ aligned_free(void* data, std::size_t size, std::size_t alignment) noexcept
 void*
 large_page_alloc(std::size_t size)
 {
-#if defined(__linux__)
-    if (hardware_large_page_size() == 0)
+#if defined(__linux__) || defined(_WIN32)
+    std::size_t largePageSize = hardware_large_page_size();
+    if (largePageSize != 0)
     {
-        throw std::system_error(std::make_error_code(std::errc::not_supported));
+        auto fullSizeR = detail::try_ceili(size, largePageSize);
+        if (fullSizeR.ec != std::errc{ })
+        {
+            throw std::bad_alloc{ };
+        }
+# if defined(__linux__)
+        void* data = ::mmap(NULL, fullSizeR.value, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+        detail::posix_assert(data != nullptr);
+        int ec = ::madvise(data, fullSizeR.value, MADV_HUGEPAGE);
+        if (ec != 0)
+        {
+            ec = errno;
+            ::munmap(data, fullSizeR.value);
+            detail::posix_raise(ec);
+        }
+        detail::set_out_of_bounds_write_trap(data, size, fullSizeR.value);
+        return data;
+# elif defined(_WIN32)
+        // TODO: should we do anything about the privileges here? (cf. https://docs.microsoft.com/en-us/windows/win32/memory/large-page-support, https://stackoverflow.com/a/42380052)
+        void* data = ::VirtualAlloc(NULL, fullSizeR.value, MEM_RESERVE | MEM_COMMIT | MEM_LARGE_PAGES, PAGE_READWRITE);
+        detail::win32_assert(data != nullptr);
+        detail::set_out_of_bounds_write_trap(data, size, fullSizeR.value);
+        return data;
+# endif
     }
-    void* data = ::mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-    detail::posix_assert(data != nullptr);
-    int ec = ::madvise(data, size, MADV_HUGEPAGE);
-    if (ec != 0)
-    {
-        ec = errno;
-        ::munmap(data, size);
-        detail::posix_raise(ec);
-    }
-    return data;
-#elif defined(_WIN32)
-    // TODO: should we do anything about the privileges here? (cf. https://docs.microsoft.com/en-us/windows/win32/memory/large-page-support, https://stackoverflow.com/a/42380052)
-    std::size_t largePageSize = ::GetLargePageMinimum();
-    if (largePageSize == 0)
-    {
-        throw std::system_error(std::make_error_code(std::errc::not_supported));
-    }
-    auto fullSizeR = detail::try_ceili(size, largePageSize);
-    if (fullSizeR.ec != std::errc{ })
-    {
-        throw std::bad_alloc{ };
-    }
-    void* data = ::VirtualAlloc(NULL, fullSizeR.value, MEM_RESERVE | MEM_COMMIT | MEM_LARGE_PAGES, PAGE_READWRITE);
-    detail::win32_assert(data != nullptr);
-    return data;
-#else
+#endif // defined(__linux__) || defined(_WIN32)
     (void) size;
     throw std::system_error(std::make_error_code(std::errc::not_supported));
-#endif
 }
 void
 large_page_free(void* data, std::size_t size) noexcept
 {
-#if defined(__linux__)
+#if defined(__linux__) || defined(_WIN32)
+    auto allocSizeR = detail::try_ceili(size, hardware_large_page_size());
+    gsl_Assert(allocSizeR.ec == std::errc{ });
+    if (!detail::check_out_of_bounds_write_trap(data, size, allocSizeR.value))
+    {
+        gsl_FailFast();  // an out-of-bounds write has damaged this allocation
+    }
+# if defined(__linux__)
     detail::posix_assert(::munmap(data, size) == 0);
-#elif defined(_WIN32)
-    (void) size;
+# elif defined(_WIN32)
     detail::win32_assert(::VirtualFree(data, 0, MEM_RELEASE));
-#else
+# endif
+#else // !(defined(__linux__) || defined(_WIN32))
     (void) data;
     (void) size;
-    std::terminate(); // should never happen because `large_page_alloc()` already throws
+    std::terminate(); // should never happen because `large_page_alloc()` would already have thrown
 #endif
 }
 
 void*
 page_alloc(std::size_t size)
 {
+    std::size_t pageSize = hardware_page_size();
+    gsl_Assert(pageSize != 0);
+    auto fullSizeR = detail::try_ceili(size, pageSize);
+    if (fullSizeR.ec != std::errc{ })
+    {
+        throw std::bad_alloc{ };
+    }
+    void* data;
 #if defined(_WIN32)
-    void* data = ::VirtualAlloc(NULL, size, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+    data = ::VirtualAlloc(NULL, fullSizeR.value, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
     detail::win32_assert(data != nullptr);
-    return data;
-#else // assume POSIX
-    void* data = ::mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+#else  // assume POSIX
+    data = ::mmap(NULL, fullSizeR.value, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     detail::posix_assert(data != nullptr);
 # if defined(__linux__)
-    int ec = ::madvise(data, size, MADV_NOHUGEPAGE);
+    int ec = ::madvise(data, fullSizeR.value, MADV_NOHUGEPAGE);
     if (ec != 0)
     {
         ec = errno;
-        ::munmap(data, size);
+        ::munmap(data, fullSizeR.value);
         detail::posix_raise(ec);
     }
 # endif // defined(__linux__)
-    return data;
 #endif
+    detail::set_out_of_bounds_write_trap(data, size, fullSizeR.value);
+    return data;
 }
 void
 page_free(void* data, std::size_t size) noexcept
 {
+    auto allocSizeR = detail::try_ceili(size, hardware_page_size());
+    gsl_Assert(allocSizeR.ec == std::errc{ });
+    if (!detail::check_out_of_bounds_write_trap(data, size, allocSizeR.value))
+    {
+        gsl_FailFast();  // an out-of-bounds write has damaged this allocation
+    }
 #if defined(_WIN32)
-    (void) size;
     detail::win32_assert(::VirtualFree(data, 0, MEM_RELEASE));
 #else // assume POSIX
     detail::posix_assert(::munmap(data, size) == 0);
