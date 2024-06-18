@@ -38,8 +38,41 @@ template <typename A> struct has_member_provides_static_alignment<A, gsl::void_t
     : std::is_convertible<decltype(A::provides_static_alignment(std::declval<std::size_t>())), bool> { };
 
 
+constexpr std::size_t
+floor_2p(std::size_t x)
+{
+    x |= x >> 1;
+    x |= x >> 2;
+    x |= x >> 4;
+    x |= x >> 8;
+    x |= x >> 16;
+    x |= x >> (sizeof(std::size_t) > 4 ? 32 : 0);  // We write the expression this way to sidestep a warning that occurs when using `if constexpr`.
+    x |= x >> (sizeof(std::size_t) > 8 ? 64 : 0);  // Sure, we can support 128-bit size_t, but, really?
+    return (x + 1) >> 1; // assumes that x < powi(2, sizeof(std::size_t) * 8 - 1), which is given because the most significant bits have special meaning and have been masked out
+}
+
+
     // = large_page_alignment | page_alignment | cache_line_alignment
 constexpr std::size_t special_alignments = std::size_t(-1) & ~(std::size_t(-1) >> 3);
+
+
+constexpr std::size_t
+raw_alignment_in_bytes(std::size_t a) noexcept
+{
+    return std::max(std::size_t(1), floor_2p(a));
+}
+
+std::size_t
+alignment_in_bytes(std::size_t a) noexcept;
+
+template <typename T>
+constexpr bool
+is_alignment_power_of_2(T value) noexcept
+{
+    return value > 0
+        && (value & (value - 1)) == 0;
+}
+
 
 constexpr bool
 provides_static_alignment(std::size_t alignmentProvided, std::size_t alignmentRequested) noexcept
@@ -48,10 +81,11 @@ provides_static_alignment(std::size_t alignmentProvided, std::size_t alignmentRe
     std::size_t basicAlignmentRequested = alignmentRequested & ~special_alignments;
     if ((alignmentProvided & special_alignments) != 0)
     {
-            // Every special alignment guarantees at least `std::max_align_t` alignment.
-        basicAlignmentProvided |= alignof(std::max_align_t);
+            // Page alignment must also guarantee cache line alignment.
+        basicAlignmentProvided |= std::hardware_constructive_interference_size;  // assumed to be a lower bound for the cache line size
     }
-    return basicAlignmentProvided >= basicAlignmentRequested
+
+    return detail::raw_alignment_in_bytes(basicAlignmentProvided) >= detail::raw_alignment_in_bytes(basicAlignmentRequested)
         && (alignmentProvided & special_alignments) >= (alignmentRequested & special_alignments);
 }
 
@@ -62,9 +96,7 @@ lookup_special_alignments(std::size_t a) noexcept;
 inline bool
 provides_dynamic_alignment(std::size_t alignmentProvided, std::size_t alignmentRequested) noexcept
 {
-    alignmentProvided = detail::lookup_special_alignments(alignmentProvided);
-    alignmentRequested = detail::lookup_special_alignments(alignmentRequested);
-    return alignmentProvided >= alignmentRequested;
+    return detail::alignment_in_bytes(alignmentProvided) >= detail::alignment_in_bytes(alignmentRequested);
 }
 
 
@@ -139,18 +171,6 @@ void*
 page_alloc(std::size_t size);
 void
 page_free(void* data, std::size_t size) noexcept;
-
-
-std::size_t
-alignment_in_bytes(std::size_t a) noexcept;
-
-template <typename T>
-constexpr bool
-is_alignment_power_of_2(T value) noexcept
-{
-    return value > 0
-        && (value & (value - 1)) == 0;
-}
 
 
 template <typename T, std::size_t Alignment, typename A, bool NeedAlignment>

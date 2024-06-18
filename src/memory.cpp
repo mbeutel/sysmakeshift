@@ -120,18 +120,6 @@ page_free(void* data, std::size_t size) noexcept
 #endif
 }
 
-static std::size_t
-floor_2p(std::size_t x)
-{
-    x |= x >> 1;
-    x |= x >> 2;
-    x |= x >> 4;
-    x |= x >> 8;
-    x |= x >> 16;
-    x |= x >> (sizeof(std::size_t) > 4 ? 32 : 0);
-    x |= x >> (sizeof(std::size_t) > 8 ? 64 : 0); // Sure, we can support 128-bit size_t, but, really?
-    return (x + 1) >> 1; // assumes that x < powi(2, sizeof(std::size_t) * 8 - 1), which is given because the most significant bits have special meaning and have been masked out
-}
 
 std::size_t
 lookup_special_alignments(std::size_t a) noexcept

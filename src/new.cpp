@@ -9,7 +9,7 @@
 #include <iostream>
 #include <stdexcept> // for runtime_error
 
-#include <gsl-lite/gsl-lite.hpp> // for narrow<>()
+#include <gsl-lite/gsl-lite.hpp> // for narrow<>(), gsl_FailFast()
 
 #include <sysmakeshift/new.hpp>
 #include <sysmakeshift/memory.hpp>
@@ -46,14 +46,16 @@ hardware_large_page_size(void) noexcept
 {
     static constexpr auto initFunc = []
     {
+        std::size_t result;
 #if defined(_WIN32)
-        return GetLargePageMinimum();
+        result = GetLargePageMinimum();
 #elif defined(__linux__)
             // I can't believe that parsing /proc/meminfo is the accepted way to query the default hugepage size and other
             // parameters.
         auto f = std::ifstream("/proc/meminfo");
         if (!f) throw std::runtime_error("cannot open /proc/meminfo"); // something is really wrong if we cannot open that file
         auto line = std::string{ };
+        result = 0;  // indicating that no "Hugepagesize" entry was found
         while (std::getline(f, line))
         {
             long hugePageSize = 0;
@@ -65,17 +67,23 @@ hardware_large_page_size(void) noexcept
                 if (std::strcmp(unit, "kB") == 0)
                 {
                     hugePageSize *= 1024l;
-                    return gsl::narrow<std::size_t>(hugePageSize);
+                    result = gsl::narrow<std::size_t>(hugePageSize);
+                    break;
                 }
                 else throw std::runtime_error("error parsing /proc/meminfo: unrecognized unit '" + std::string(unit) + "'");
             }
         }
-        return std::size_t(0); // no "Hugepagesize" entry found
 #elif defined(__APPLE__)
-        return 0; // MacOS does support huge pages ("superpages") but we currently didn't write any code to support them
+        result = 0; // MacOS does support huge pages ("superpages") but we currently didn't write any code to support them
 #else
 # error Unsupported operating system.
 #endif
+        if (result % hardware_page_size() != 0)
+        {
+            gsl_FailFast();  // In this library we assume that the large page size is a multiple of page size, and thus a multiple of cache line size as well.
+        }
+        return result;
+
     };
     return detail::lazy_init(hardware_large_page_size_value, std::size_t(-1), initFunc);
 }
@@ -89,17 +97,23 @@ hardware_page_size(void) noexcept
 {
     static constexpr auto initFunc = []
     {
+        std::size_t result;
 #if defined(_WIN32)
         SYSTEM_INFO sysInfo;
         GetSystemInfo(&sysInfo);
-        return sysInfo.dwPageSize;
+        result = sysInfo.dwPageSize;
 #elif defined(__linux__)
-        return sysconf(_SC_PAGESIZE);
+        result = sysconf(_SC_PAGESIZE);
 #elif defined(__APPLE__)
-        return getpagesize();
+        result = getpagesize();
 #else
 # error Unsupported operating system.
 #endif
+        if (result % hardware_cache_line_size() != 0)
+        {
+            gsl_FailFast();  // In this library we assume that page size is a multiple of cache line size.
+        }
+        return result;
     };
     return detail::lazy_init(hardware_page_size_value, std::size_t(-1), initFunc);
 }
