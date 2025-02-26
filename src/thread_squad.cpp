@@ -47,7 +47,7 @@
 # define THREAD_PINNING_SUPPORTED
 #endif // defined(_WIN32) || defined(USE_PTHREAD_SETAFFINITY)
 
-#include <gsl-lite/gsl-lite.hpp> // for narrow<>(), narrow_cast<>(), span<>
+#include <gsl-lite/gsl-lite.hpp> // for narrow_failfast<>(), narrow_cast<>(), span<>
 
 #include <sysmakeshift/thread_squad.hpp>
 #include <sysmakeshift/buffer.hpp>      // for aligned_buffer<>
@@ -303,8 +303,8 @@ pause(void)
 
 constexpr int spinCount = 6; // 4 or 6
 constexpr int spinRep = 1; // 2 or 1
-constexpr int pauseCount = 9;
-constexpr int yieldCount = 0; // 6
+constexpr int pauseCountExp = 9;
+constexpr int yieldCountExp = 0; // 6
 
 template <typename T>
 bool
@@ -312,7 +312,7 @@ wait_equal_exponential_backoff(std::atomic<T> const& a, T oldValue, bool spinWai
 {
     int lspinCount = spinWait ? spinCount : 0;
     if (a.load(std::memory_order_relaxed) != oldValue) return true;
-    for (int i = 0; i < (1 << pauseCount); ++i)
+    for (int i = 0; i < (1 << pauseCountExp); ++i)
     {
         int n = 1;
         for (int j = 0; j < lspinCount; ++j)
@@ -330,7 +330,7 @@ wait_equal_exponential_backoff(std::atomic<T> const& a, T oldValue, bool spinWai
         if (a.load(std::memory_order_relaxed) != oldValue) return true;
         detail::pause();
     }
-    int lyieldCount = spinWait ? (1 << yieldCount) : 0;
+    int lyieldCount = spinWait ? (1 << yieldCountExp) : 0;
     for (int i = 0; i < lyieldCount; ++i)
     {
         if (a.load(std::memory_order_relaxed) != oldValue) return true;
@@ -402,7 +402,7 @@ private:
 
 public:
     os_thread(void)
-        : coreAffinity_(std::size_t(-1))
+        : coreAffinity_{ std::size_t(-1) }
     {
     }
 
@@ -457,35 +457,18 @@ public:
 #endif
     }
 
-    static void
-    join(gsl::span<os_thread* const> threads)
+    void
+    join()
     {
+        gsl_Expects(is_running());
+
 #if defined(_WIN32)
-        for (gsl::index i = 0, n = gsl::ssize(threads); i < n; )
-        {
-                // Join as many threads as possible in a single syscall.
-            HANDLE lhandles[MAXIMUM_WAIT_OBJECTS];
-            int d = gsl::narrow<int>(std::min<gsl::dim>(n - i, MAXIMUM_WAIT_OBJECTS));
-            for (int j = 0; j < d; ++j)
-            {
-                gsl_Expects(threads[i + j]->is_running());
-                lhandles[j] = threads[i + j]->handle_.get();
-            }
-            DWORD result = ::WaitForMultipleObjects(DWORD(d), lhandles, TRUE, INFINITE);
-            detail::win32_assert(result != WAIT_FAILED);
-            for (int j = 0; j < d; ++j)
-            {
-                threads[i + j]->handle_.reset();
-            }
-            i += d;
-        }
+        DWORD result = ::WaitForSingleObject(handle_.get(), INFINITE);
+        detail::win32_assert(result != WAIT_FAILED);
+        handle_.reset();
 #elif defined(USE_PTHREAD)
-        for (auto* thread : threads)
-        {
-            gsl_Expects(thread->is_running());
-            detail::posix_check(::pthread_join(thread->handle_.get(), NULL));
-            thread->handle_.release();
-        }
+        detail::posix_check(::pthread_join(handle_.get(), NULL));
+        handle_.release();
 #else
 # error Unsupported operating system.
 #endif
@@ -497,8 +480,12 @@ public:
 static std::size_t
 get_hardware_thread_id(int threadIdx, int maxNumHardwareThreads, gsl::span<int const> hardwareThreadMappings)
 {
+    gsl_Expects(threadIdx >= 0);
+    gsl_Expects(maxNumHardwareThreads > 0);
+    gsl_Expects(hardwareThreadMappings.empty() || maxNumHardwareThreads <= gsl::ssize(hardwareThreadMappings));
+
     auto subidx = threadIdx % maxNumHardwareThreads;
-    return gsl::narrow<std::size_t>(
+    return gsl::narrow_failfast<std::size_t>(
         !hardwareThreadMappings.empty() ? hardwareThreadMappings[subidx]
         : subidx);
 }
@@ -626,7 +613,6 @@ private:
     };
 
     static constexpr int treeBreadth = 8;
-    static constexpr int handleChunkSize = 64;
 
         // synchronization data
     aligned_buffer<thread_notify_data, cache_line_alignment> threadNotifyData_;
@@ -706,8 +692,8 @@ private:
 public:
     thread_squad_impl(thread_squad::params const& params)
         : thread_squad_impl_base{ params.num_threads },
-          threadNotifyData_(gsl::narrow<std::size_t>(params.num_threads)),
-          threadData_(gsl::narrow<std::size_t>(params.num_threads), std::in_place, *this),
+          threadNotifyData_(gsl::narrow_failfast<std::size_t>(params.num_threads)),
+          threadData_(gsl::narrow_failfast<std::size_t>(params.num_threads), std::in_place, *this),
           threadSquadId_(threadSquadCounter.fetch_add(1, std::memory_order_acq_rel))
     {
         for (int i = 0; i < numThreads; ++i)
@@ -755,17 +741,10 @@ public:
     void
     join_all_threads(void)
     {
-        for (gsl::index i = 0; i < numThreads; )
+        for (gsl::index i = 0; i < numThreads; ++i)
         {
-            os_thread* lthreads[handleChunkSize];
-            int d = gsl::narrow<int>(std::min<gsl::dim>(numThreads - i, handleChunkSize));
-            for (int j = 0; j < d; ++j)
-            {
-                THREAD_SQUAD_DBG("thread squad #%u, thread -1: forking %d\n", threadSquadId_, i + j);
-                lthreads[j] = &threadData_[i + j].osThread_;
-            }
-            os_thread::join(gsl::span(lthreads, d));
-            i += d;
+            THREAD_SQUAD_DBG("thread squad #%u, thread -1: joining %d\n", threadSquadId_, i);
+            threadData_[i].osThread_.join();
         }
     }
 
@@ -820,9 +799,9 @@ public:
         return threadSquadId_;
     }
 
-    void* thread_context_for(int threadIdx_)
+    void* thread_context_for(int threadIdx)
     {
-        return &threadData_[threadIdx_];
+        return &threadData_[threadIdx];
     }
 };
 
@@ -840,7 +819,13 @@ run_thread(thread_squad_impl::thread_data& threadData)
         threadData.task_run(task);
         threadData.wait_for_subthreads();
         threadData.task_signal_completion();
-        ++pass;
+
+            // We only require `pass > 0` on all passes after the first one, so clamp the value to avoid UB and wraparound.
+        if (pass < std::numeric_limits<int>::max())
+        {
+            ++pass;
+        }
+
         if (task.terminationRequested) break;
     }
     THREAD_SQUAD_DBG("thread squad #%u, thread %d: exiting after %d passes\n", threadData.thread_squad_id(), threadData.thread_idx(), pass);
@@ -960,7 +945,7 @@ detail::thread_squad_handle
 thread_squad::create(thread_squad::params p)
 {
         // Replace placeholder arguments with appropriate default values.
-    int hardwareConcurrency = gsl::narrow<int>(std::thread::hardware_concurrency());
+    int hardwareConcurrency = gsl::narrow_failfast<int>(std::thread::hardware_concurrency());
     if (p.num_threads == 0)
     {
         p.num_threads = hardwareConcurrency;
@@ -968,7 +953,7 @@ thread_squad::create(thread_squad::params p)
     if (p.max_num_hardware_threads == 0)
     {
         p.max_num_hardware_threads =
-            !p.hardware_thread_mappings.empty() ? gsl::narrow<int>(p.hardware_thread_mappings.size())
+            !p.hardware_thread_mappings.empty() ? gsl::narrow_failfast<int>(p.hardware_thread_mappings.size())
           : hardwareConcurrency;
     }
     p.max_num_hardware_threads = std::max(p.max_num_hardware_threads, hardwareConcurrency);

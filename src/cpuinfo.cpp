@@ -27,7 +27,7 @@
 # error Unsupported operating system.
 #endif
 
-#include <gsl-lite/gsl-lite.hpp> // for dim, ssize(), gsl_ExpectsAudit(), narrow<>()
+#include <gsl-lite/gsl-lite.hpp> // for dim, ssize(), gsl_ExpectsAudit(), narrow_failfast<>()
 
 #include <sysmakeshift/detail/errors.hpp>
 
@@ -201,7 +201,7 @@ init_cpu_info(void) noexcept
 
         std::sort(ids.begin(), ids.end());
         auto numUnique = std::unique(ids.begin(), ids.end()) - ids.begin();
-        newPhysicalConcurrency = gsl::narrow<unsigned>(numUnique);
+        newPhysicalConcurrency = gsl::narrow_failfast<unsigned>(numUnique);
 
         coreThreadIds.resize(numUnique);
         std::transform(
@@ -217,7 +217,7 @@ init_cpu_info(void) noexcept
         std::size_t nbResult = sizeof result;
         int ec = sysctlbyname("hw.physicalcpu", &result, &nbResult, 0, 0);
         if (ec != 0) throw std::runtime_error("cannot query hw.physicalcpu");
-        newPhysicalConcurrency = gsl::narrow<unsigned>(result);
+        newPhysicalConcurrency = gsl::narrow_failfast<unsigned>(result);
 #else
 # error Unsupported operating system.
 #endif
@@ -287,7 +287,7 @@ physical_core_ids(void) noexcept
         physicalConcurrency = detail::cpu_info_value.physical_concurrency.load(std::memory_order_relaxed);
         coreThreadIdsPtr = detail::cpu_info_value.core_thread_ids_ptr.load(std::memory_order_relaxed);
     }
-    return gsl::span<int const>(coreThreadIdsPtr, gsl::narrow_cast<std::size_t>(physicalConcurrency));
+    return gsl::span<int const>(coreThreadIdsPtr, gsl::narrow_failfast<std::size_t>(physicalConcurrency));
 #else // ^^^ defined(_WIN32) || defined(__linux__) ^^^ / vvv !defined(_WIN32) && !defined(__linux__) vvv
     return { };
 #endif // defined(_WIN32) || defined(__linux__)
