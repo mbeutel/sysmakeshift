@@ -1,24 +1,24 @@
 ﻿
-#ifndef INCLUDED_SYSMAKESHIFT_MEMORY_HPP_
-#define INCLUDED_SYSMAKESHIFT_MEMORY_HPP_
+#ifndef INCLUDED_PATTON_MEMORY_HPP_
+#define INCLUDED_PATTON_MEMORY_HPP_
 
 
-#include <new>         // for align_val_t, bad_alloc
+#include <new>          // for align_val_t, bad_alloc
 #include <limits>
-#include <cstddef>     // for size_t, ptrdiff_t, max_align_t
-#include <cstdlib>     // for calloc(), free()
-#include <cstring>     // for memcpy()
-#include <memory>      // for unique_ptr<>, allocator<>, allocator_traits<>, align()
-#include <utility>     // for forward<>()
-#include <type_traits> // for is_nothrow_default_constructible<>, enable_if<>, is_same<>, remove_cv<>
+#include <cstddef>      // for size_t, ptrdiff_t, max_align_t
+#include <cstdlib>      // for calloc(), free()
+#include <cstring>      // for memcpy()
+#include <memory>       // for unique_ptr<>, allocator<>, allocator_traits<>, align()
+#include <utility>      // for forward<>()
+#include <type_traits>  // for is_nothrow_default_constructible<>, enable_if<>, is_same<>, remove_cv<>
 
-#include <gsl-lite/gsl-lite.hpp> // for gsl_Expects(), gsl_NODISCARD
+#include <gsl-lite/gsl-lite.hpp>  // for gsl_Expects()
 
-#include <sysmakeshift/detail/memory.hpp>
-#include <sysmakeshift/detail/type_traits.hpp> // for can_instantiate<>
+#include <patton/detail/memory.hpp>
+#include <patton/detail/type_traits.hpp>  // for can_instantiate<>
 
 
-namespace sysmakeshift {
+namespace patton {
 
 
 namespace gsl = ::gsl_lite;
@@ -56,6 +56,13 @@ public:
     }
 };
 
+template <typename T1, typename T2, typename A1, typename A2>
+[[nodiscard]] bool
+operator ==(default_init_allocator<T1, A1> const& lhs, default_init_allocator<T2, A2> const& rhs) noexcept
+{
+    return static_cast<A1 const&>(lhs) == static_cast<A2 const&>(rhs);
+}
+
 
     //
     // Allocator that always returns zero-initialized memory.
@@ -66,7 +73,7 @@ class zero_init_allocator
 public:
     using value_type = T;
 
-    constexpr zero_init_allocator(void) noexcept
+    constexpr zero_init_allocator() noexcept
     {
     }
     template <typename U>
@@ -74,7 +81,7 @@ public:
     {
     }
 
-    gsl_NODISCARD value_type*
+    [[nodiscard]] value_type*
     allocate(std::size_t n)
     {
         auto mem = std::calloc(n, sizeof(value_type));
@@ -90,16 +97,10 @@ public:
 };
 
 template <typename T, typename U>
-gsl_NODISCARD bool
+[[nodiscard]] bool
 operator ==(zero_init_allocator<T> const&, zero_init_allocator<U> const&) noexcept
 {
     return true;
-}
-template <typename T, typename U>
-gsl_NODISCARD bool
-operator !=(zero_init_allocator<T> const& x, zero_init_allocator<U> const& y) noexcept
-{
-    return !(x == y);
 }
 
 
@@ -126,8 +127,8 @@ constexpr std::size_t cache_line_alignment = (std::size_t(-1) & ~(std::size_t(-1
     // `cache_line_alignment` are not known until runtime,
     // hence to satisfy a requested special alignment it must be provided explicitly by the provided alignment.
     //
-constexpr bool
-provides_static_alignment(std::size_t alignmentProvided, std::size_t alignmentRequested) noexcept
+[[nodiscard]] bool
+constexpr provides_static_alignment(std::size_t alignmentProvided, std::size_t alignmentRequested) noexcept
 {
     return detail::provides_static_alignment(alignmentProvided, alignmentRequested);
 }
@@ -138,8 +139,8 @@ provides_static_alignment(std::size_t alignmentProvided, std::size_t alignmentRe
     // Looks up the alignments corresponding to the special alignment values `large_page_alignment`, `page_alignment`, and
     // `cache_line_alignment`.
     //
-inline bool
-provides_dynamic_alignment(std::size_t alignmentProvided, std::size_t alignmentRequested) noexcept
+[[nodiscard]] bool
+inline provides_dynamic_alignment(std::size_t alignmentProvided, std::size_t alignmentRequested) noexcept
 {
     return detail::provides_dynamic_alignment(alignmentProvided, alignmentRequested);
 }
@@ -152,20 +153,20 @@ template <typename A>
 struct aligned_allocator_traits
 {
 private:
-    static constexpr bool
-    provides_static_alignment_impl(std::size_t a, std::false_type /*hasMember*/)
+    bool
+    static constexpr provides_static_alignment_impl(std::size_t a, std::false_type /*hasMember*/)
     {
-        return sysmakeshift::provides_static_alignment(alignof(std::max_align_t), a);
+        return patton::provides_static_alignment(alignof(std::max_align_t), a);
     }
-    static constexpr bool
-    provides_static_alignment_impl(std::size_t a, std::true_type /*hasMember*/)
+    bool
+    static constexpr provides_static_alignment_impl(std::size_t a, std::true_type /*hasMember*/)
     {
         return A::provides_static_alignment(a);
     }
 
 public:
-    gsl_NODISCARD static constexpr bool
-    provides_static_alignment(std::size_t a) noexcept
+    [[nodiscard]] bool
+    static constexpr provides_static_alignment(std::size_t a) noexcept
     {
         return provides_static_alignment_impl(a, detail::has_member_provides_static_alignment<A>{ });
     }
@@ -191,7 +192,7 @@ public:
         using other = aligned_allocator<U, Alignment>;
     };
 
-    constexpr aligned_allocator(void) noexcept
+    constexpr aligned_allocator() noexcept
     {
     }
     template <typename U>
@@ -199,13 +200,13 @@ public:
     {
     }
 
-    gsl_NODISCARD static constexpr bool
-    provides_static_alignment(std::size_t a) noexcept
+    [[nodiscard]] bool
+    static constexpr provides_static_alignment(std::size_t a) noexcept
     {
-        return sysmakeshift::provides_static_alignment(Alignment | alignof(T), a);
+        return patton::provides_static_alignment(Alignment | alignof(T), a);
     }
 
-    gsl_NODISCARD T*
+    [[nodiscard]] T*
     allocate(std::size_t n)
     {
         std::size_t a = detail::alignment_in_bytes(Alignment | alignof(T));
@@ -223,16 +224,10 @@ public:
 };
 
 template <typename T, typename U, std::size_t Alignment>
-gsl_NODISCARD bool
+[[nodiscard]] bool
 operator ==(aligned_allocator<T, Alignment>, aligned_allocator<U, Alignment>) noexcept
 {
     return true;
-}
-template <typename T, typename U, std::size_t Alignment>
-gsl_NODISCARD bool
-operator !=(aligned_allocator<T, Alignment> x, aligned_allocator<U, Alignment> y) noexcept
-{
-    return !(x == y);
 }
 
 
@@ -253,7 +248,7 @@ public:
         using other = page_allocator<U>;
     };
 
-    constexpr page_allocator(void) noexcept
+    constexpr page_allocator() noexcept
     {
     }
     template <typename U>
@@ -261,13 +256,13 @@ public:
     {
     }
 
-    gsl_NODISCARD static constexpr bool
-    provides_static_alignment(std::size_t a) noexcept
+    [[nodiscard]] bool
+    static constexpr provides_static_alignment(std::size_t a) noexcept
     {
-        return sysmakeshift::provides_static_alignment(page_alignment, a);
+        return patton::provides_static_alignment(page_alignment, a);
     }
 
-    gsl_NODISCARD T*
+    [[nodiscard]] T*
     allocate(std::size_t n)
     {
         if (n >= std::numeric_limits<std::size_t>::max() / sizeof(T)) throw std::bad_alloc{ }; // overflow
@@ -283,16 +278,10 @@ public:
 };
 
 template <typename T, typename U>
-gsl_NODISCARD bool
+[[nodiscard]] bool
 operator ==(page_allocator<T>, page_allocator<U>) noexcept
 {
     return true;
-}
-template <typename T, typename U>
-gsl_NODISCARD bool
-operator !=(page_allocator<T> x, page_allocator<U> y) noexcept
-{
-    return !(x == y);
 }
 
 
@@ -315,7 +304,7 @@ public:
         using other = large_page_allocator<U>;
     };
 
-    constexpr large_page_allocator(void) noexcept
+    constexpr large_page_allocator() noexcept
     {
     }
     template <typename U>
@@ -323,15 +312,15 @@ public:
     {
     }
 
-    gsl_NODISCARD static constexpr bool
-    provides_static_alignment(std::size_t a) noexcept
+    [[nodiscard]] bool
+    static constexpr provides_static_alignment(std::size_t a) noexcept
     {
             // We cannot guarantee large-page alignment particularly on Linux because `large_page_alloc()` uses `mmap()` and
             // `madvise()`, so we only promise page alignment here.
-        return sysmakeshift::provides_static_alignment(page_alignment, a);
+        return patton::provides_static_alignment(page_alignment, a);
     }
 
-    gsl_NODISCARD T*
+    [[nodiscard]] T*
     allocate(std::size_t n)
     {
         if (n >= std::numeric_limits<std::size_t>::max() / sizeof(T)) throw std::bad_alloc{ }; // overflow
@@ -347,16 +336,10 @@ public:
 };
 
 template <typename T, typename U>
-gsl_NODISCARD bool
+[[nodiscard]] bool
 operator ==(large_page_allocator<T>, large_page_allocator<U>) noexcept
 {
     return true;
-}
-template <typename T, typename U>
-gsl_NODISCARD bool
-operator !=(large_page_allocator<T> x, large_page_allocator<U> y) noexcept
-{
-    return !(x == y);
 }
 
 
@@ -503,7 +486,7 @@ allocate_unique(A alloc, std::size_t size)
 }
 
 
-} // namespace sysmakeshift
+} // namespace patton
 
 
-#endif // INCLUDED_SYSMAKESHIFT_MEMORY_HPP_
+#endif // INCLUDED_PATTON_MEMORY_HPP_

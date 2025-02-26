@@ -8,12 +8,10 @@
 # include <Windows.h> // GetLastError()
 #endif // defined(_WIN32)
 
-#include <sysmakeshift/detail/errors.hpp>
+#include <patton/detail/errors.hpp>
 
 
-namespace sysmakeshift {
-
-namespace detail {
+namespace patton::detail {
 
 
 [[noreturn]] void
@@ -23,7 +21,7 @@ posix_raise(int errorCode)
 }
 
 [[noreturn]] void
-posix_raise_last_error(void)
+posix_raise_last_error()
 {
     detail::posix_raise(errno);
 }
@@ -36,13 +34,11 @@ win32_raise(std::uint32_t errorCode)
 }
 
 [[noreturn]] void
-win32_raise_last_error(void)
+win32_raise_last_error()
 {
     detail::win32_raise(::GetLastError());
 }
 #endif // _WIN32
 
 
-} // namespace detail
-
-} // namespace sysmakeshift
+} // namespace patton::detail

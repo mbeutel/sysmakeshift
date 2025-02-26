@@ -14,16 +14,14 @@
 
 #include <gsl-lite/gsl-lite.hpp>  // for gsl_Assert(), gsl_FailFast()
 
-#include <sysmakeshift/new.hpp>    // for hardware_large_page_size(), hardware_page_size(), hardware_cache_line_size()
-#include <sysmakeshift/memory.hpp>
+#include <patton/new.hpp>    // for hardware_large_page_size(), hardware_page_size(), hardware_cache_line_size()
+#include <patton/memory.hpp>
 
-#include <sysmakeshift/detail/arithmetic.hpp> // for try_ceili()
-#include <sysmakeshift/detail/errors.hpp>
+#include <patton/detail/arithmetic.hpp> // for try_ceili()
+#include <patton/detail/errors.hpp>
 
 
-namespace sysmakeshift {
-
-namespace detail {
+namespace patton::detail {
 
 
 constexpr std::size_t maxTrapCount = 4;
@@ -69,7 +67,7 @@ aligned_free(void* data, std::size_t size, std::size_t alignment) noexcept
 }
 
 void*
-large_page_alloc(std::size_t size)
+large_page_alloc([[maybe_unused]] std::size_t size)
 {
 #if defined(__linux__) || defined(_WIN32)
     std::size_t largePageSize = hardware_large_page_size();
@@ -101,11 +99,10 @@ large_page_alloc(std::size_t size)
 # endif
     }
 #endif // defined(__linux__) || defined(_WIN32)
-    (void) size;
     throw std::system_error(std::make_error_code(std::errc::not_supported));
 }
 void
-large_page_free(void* data, std::size_t size) noexcept
+large_page_free([[maybe_unused]] void* data, [[maybe_unused]] std::size_t size) noexcept
 {
 #if defined(__linux__) || defined(_WIN32)
     auto allocSizeR = detail::try_ceili(size, hardware_large_page_size());
@@ -120,8 +117,6 @@ large_page_free(void* data, std::size_t size) noexcept
     detail::win32_assert(::VirtualFree(data, 0, MEM_RELEASE));
 # endif
 #else // !(defined(__linux__) || defined(_WIN32))
-    (void) data;
-    (void) size;
     std::terminate(); // should never happen because `large_page_alloc()` would already have thrown
 #endif
 }
@@ -202,6 +197,4 @@ alignment_in_bytes(std::size_t a) noexcept
 }
 
 
-} // namespace detail
-
-} // namespace sysmakeshift
+} // namespace patton::detail

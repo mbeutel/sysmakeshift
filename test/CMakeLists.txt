@@ -1,20 +1,20 @@
 
-# sysmakeshift C++ library
+# patton C++ library
 # Author: Moritz Beutel
-# sysmakeshift unit tests
+# unit tests
 
 
 cmake_minimum_required(VERSION 3.20)
 
 # dependencies
 find_package(Threads REQUIRED)
-find_package(gsl-lite 0.40 REQUIRED)
-find_package(Catch2 3 REQUIRED)
+find_package(gsl-lite 0.42 REQUIRED)
+find_package(Catch2 REQUIRED)
 
 include(TargetCompileSettings)
 
 # test target
-add_executable(test-sysmakeshift
+add_executable(test-patton
     "test-buffer.cpp"
     "test-memory.cpp"
     "test-new.cpp"
@@ -23,14 +23,14 @@ add_executable(test-sysmakeshift
 )
 
 # compiler settings
-cmakeshift_target_compile_settings(test-sysmakeshift
+cmakeshift_target_compile_settings(test-patton
     SOURCE_FILE_ENCODING "UTF-8"
 )
-target_compile_features(test-sysmakeshift
+target_compile_features(test-patton
     PRIVATE
-        cxx_std_17
+        cxx_std_20
 )
-target_precompile_headers(test-sysmakeshift
+target_precompile_headers(test-patton
     PRIVATE
         # C standard library
         <cstddef>
@@ -50,7 +50,7 @@ target_precompile_headers(test-sysmakeshift
 )
 
 # test properties
-target_compile_definitions(test-sysmakeshift
+target_compile_definitions(test-patton
     PRIVATE
         #CATCH_CONFIG_CONSOLE_WIDTH=120
         #CATCH_CLARA_CONFIG_CONSOLE_WIDTH=120
@@ -64,14 +64,14 @@ target_compile_definitions(test-sysmakeshift
 )
 
 # test dependencies
-target_link_libraries(test-sysmakeshift
+target_link_libraries(test-patton
     PRIVATE
         Threads::Threads
         gsl::gsl-lite-v1
         Catch2::Catch2WithMain
-        sysmakeshift
+        patton
 )
 
 # register tests
-add_test(NAME test-sysmakeshift COMMAND test-sysmakeshift)
-set_property(TEST test-sysmakeshift PROPERTY FAIL_REGULAR_EXPRESSION "Sanitizer")
+add_test(NAME test-patton COMMAND test-patton)
+set_property(TEST test-patton PROPERTY FAIL_REGULAR_EXPRESSION "Sanitizer")

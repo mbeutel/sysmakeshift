@@ -1,25 +1,26 @@
 
-#ifndef INCLUDED_SYSMAKESHIFT_BUFFER_HPP_
-#define INCLUDED_SYSMAKESHIFT_BUFFER_HPP_
+#ifndef INCLUDED_PATTON_BUFFER_HPP_
+#define INCLUDED_PATTON_BUFFER_HPP_
 
 
-#include <new>          // for bad_alloc
-#include <memory>       // for unique_ptr<>, allocator_traits<>
-#include <cstddef>      // for size_t, ptrdiff_t
-#include <utility>      // for move(), forward<>(), exchange(), in_place (C++17)
-#include <type_traits>  // for is_const<>, is_volatile<>, is_reference<>, is_nothrow_constructible<>, enable_if<>
-#include <system_error> // for errc
+#include <new>           // for bad_alloc
+#include <span>
+#include <memory>        // for unique_ptr<>, allocator_traits<>
+#include <cstddef>       // for size_t, ptrdiff_t
+#include <utility>       // for move(), forward<>(), exchange(), in_place
+#include <type_traits>   // for is_const<>, is_volatile<>, is_reference<>, is_nothrow_constructible<>, enable_if<>, negation<>
+#include <system_error>  // for errc
 
-#include <gsl-lite/gsl-lite.hpp> // for gsl_Expects(), owner<>, span<>, negation<>, gsl_NODISCARD, gsl_CPP17_OR_GREATER
+#include <gsl-lite/gsl-lite.hpp>  // for gsl_Expects(), owner<>
 
-#include <sysmakeshift/memory.hpp> // for aligned_allocator<>, aligned_allocator_adaptor<>
+#include <patton/memory.hpp>  // for aligned_allocator<>, aligned_allocator_adaptor<>
 
-#include <sysmakeshift/detail/arithmetic.hpp>  // for try_multiply_unsigned(), try_ceili()
-#include <sysmakeshift/detail/buffer.hpp>
-#include <sysmakeshift/detail/transaction.hpp>
+#include <patton/detail/buffer.hpp>
+#include <patton/detail/arithmetic.hpp>   // for try_multiply_unsigned(), try_ceili()
+#include <patton/detail/transaction.hpp>
 
 
-namespace sysmakeshift {
+namespace patton {
 
 
 namespace gsl = ::gsl_lite;
@@ -53,8 +54,8 @@ private:
     std::size_t size_; // # elements
     std::size_t bytesPerElement_;
 
-    static std::size_t
-    computeBytesPerElement(void)
+    std::size_t
+    static computeBytesPerElement()
     {
         auto bytesPerElementR = detail::try_ceili(sizeof(T), detail::alignment_in_bytes(Alignment | alignof(T)));
         if (bytesPerElementR.ec != std::errc{ }) throw std::bad_alloc{ };
@@ -80,7 +81,7 @@ private:
 
             std::size_t numElementsConstructed;
             auto transaction = detail::make_transaction(
-                gsl::negation<std::is_nothrow_constructible<T, Ts...>>{ },
+                std::negation<std::is_nothrow_constructible<T, Ts...>>{ },
                 [this, &numElementsConstructed]
                 {
                     detail::destroy_aligned_buffer<T>(data_, get_allocator(), numElementsConstructed, bytesPerElement_);
@@ -93,7 +94,7 @@ private:
         }
     }
     void
-    destroy_and_free(void) noexcept
+    destroy_and_free() noexcept
     {
         detail::destroy_aligned_buffer<T>(data_, get_allocator(), size_, bytesPerElement_);
         auto alloc = byte_allocator_(get_allocator());
@@ -113,7 +114,7 @@ public:
     using const_iterator = detail::aligned_buffer_iterator<T const>;
 
     template <typename U = int, std::enable_if_t<allocator_is_default_constructible_, U> = 0>
-    constexpr aligned_buffer(void) noexcept
+    constexpr aligned_buffer() noexcept
         : allocator_type{ }, data_(nullptr), size_(0), bytesPerElement_(0)
     {
     }
@@ -139,7 +140,6 @@ public:
         : aligned_buffer(internal_constructor{ }, _size, std::move(_alloc), _value)
     {
     }
-#if gsl_CPP17_OR_GREATER
     template <typename... Ts,
               typename U = int, std::enable_if_t<allocator_is_default_constructible_, U> = 0>
     explicit aligned_buffer(std::size_t _size, std::in_place_t, Ts&&... _args)
@@ -151,7 +151,6 @@ public:
         : aligned_buffer(internal_constructor{ }, _size, std::move(_alloc), std::forward<Ts>(_args)...)
     {
     }
-#endif // gsl_CPP17_OR_GREATER
 
     constexpr aligned_buffer(aligned_buffer&& rhs) noexcept
         : data_(std::exchange(rhs.data_, { })),
@@ -175,7 +174,7 @@ public:
         return *this;
     }
 
-    ~aligned_buffer(void)
+    ~aligned_buffer()
     {
         if (data_ != nullptr)
         {
@@ -183,25 +182,25 @@ public:
         }
     }
 
-    gsl_NODISCARD allocator_type
-    get_allocator(void) const noexcept
+    [[nodiscard]] allocator_type
+    get_allocator() const noexcept
     {
         return *this;
     }
 
-    gsl_NODISCARD std::size_t
-    size(void) const noexcept
+    [[nodiscard]] std::size_t
+    size() const noexcept
     {
         return size_;
     }
-    gsl_NODISCARD reference
+    [[nodiscard]] reference
     operator [](std::size_t i)
     {
         gsl_Expects(i < size_);
 
         return *reinterpret_cast<pointer>(&data_[i * bytesPerElement_]);
     }
-    gsl_NODISCARD const_reference
+    [[nodiscard]] const_reference
     operator [](std::size_t i) const
     {
         gsl_Expects(i < size_);
@@ -209,53 +208,53 @@ public:
         return *reinterpret_cast<pointer>(&data_[i * bytesPerElement_]);
     }
 
-    gsl_NODISCARD iterator
-    begin(void) noexcept
+    [[nodiscard]] iterator
+    begin() noexcept
     {
         return { data_, 0, bytesPerElement_ };
     }
-    gsl_NODISCARD const_iterator
-    begin(void) const noexcept
+    [[nodiscard]] const_iterator
+    begin() const noexcept
     {
         return { data_, 0, bytesPerElement_ };
     }
-    gsl_NODISCARD iterator
-    end(void) noexcept
+    [[nodiscard]] iterator
+    end() noexcept
     {
         return { data_, size_, bytesPerElement_ };
     }
-    gsl_NODISCARD const_iterator
-    end(void) const noexcept
+    [[nodiscard]] const_iterator
+    end() const noexcept
     {
         return { data_, size_, bytesPerElement_ };
     }
 
-    gsl_NODISCARD constexpr bool
-    empty(void) const noexcept
+    [[nodiscard]] constexpr bool
+    empty() const noexcept
     {
         return size_ == 0;
     }
 
-    gsl_NODISCARD reference
-    front(void)
+    [[nodiscard]] reference
+    front()
     {
         gsl_Expects(!empty());
         return (*this)[0];
     }
-    gsl_NODISCARD const_reference
-    front(void) const
+    [[nodiscard]] const_reference
+    front() const
     {
         gsl_Expects(!empty());
         return (*this)[0];
     }
-    gsl_NODISCARD reference
-    back(void)
+    [[nodiscard]] reference
+    back()
     {
         gsl_Expects(!empty());
         return (*this)[size() - 1];
     }
-    gsl_NODISCARD const_reference
-    back(void) const
+    [[nodiscard]] const_reference
+    back() const
     {
         gsl_Expects(!empty());
         return (*this)[size() - 1];
@@ -313,7 +312,7 @@ private:
 
             std::size_t numElementsConstructed;
             auto transaction = detail::make_transaction(
-                gsl::negation<std::is_nothrow_constructible<T, Ts...>>{ },
+                std::negation<std::is_nothrow_constructible<T, Ts...>>{ },
                 [this, &numElementsConstructed]
                 {
                     detail::destroy_aligned_row_buffer<T>(data_, get_allocator(), rows_, cols_, bytesPerRow_, numElementsConstructed);
@@ -325,7 +324,7 @@ private:
             transaction.commit();
         }
     }
-    void destroy_and_free(void) noexcept
+    void destroy_and_free() noexcept
     {
         detail::destroy_aligned_row_buffer<T>(data_, get_allocator(), rows_, cols_, bytesPerRow_);
         auto alloc = byte_allocator_(get_allocator());
@@ -335,14 +334,14 @@ private:
 public:
     using size_type = std::size_t;
     using difference_type = std::ptrdiff_t;
-    using reference = gsl::span<T>;
-    using const_reference = gsl::span<T const>;
+    using reference = std::span<T>;
+    using const_reference = std::span<T const>;
 
     using iterator = detail::aligned_row_buffer_iterator<T>;
     using const_iterator = detail::aligned_row_buffer_iterator<T const>;
 
     template <typename U = int, std::enable_if_t<allocator_is_default_constructible_, U> = 0>
-    aligned_row_buffer(void) noexcept
+    aligned_row_buffer() noexcept
         : allocator_type{ }, data_(nullptr), rows_(0), cols_(0), bytesPerRow_(0)
     {
     }
@@ -368,7 +367,6 @@ public:
         : aligned_row_buffer(internal_constructor{ }, _rows, _cols, std::move(_alloc), _value)
     {
     }
-#if gsl_CPP17_OR_GREATER
     template <typename... Ts,
               typename U = int, std::enable_if_t<allocator_is_default_constructible_, U> = 0>
     explicit aligned_row_buffer(std::size_t _rows, std::size_t _cols, std::in_place_t, Ts&&... _args)
@@ -380,7 +378,6 @@ public:
         : aligned_row_buffer(internal_constructor{ }, _rows, _cols, std::move(_alloc), std::forward<Ts>(_args)...)
     {
     }
-#endif // gsl_CPP17_OR_GREATER
 
     constexpr aligned_row_buffer(aligned_row_buffer&& rhs) noexcept
         : data_(std::exchange(rhs.data_, { })),
@@ -405,7 +402,7 @@ public:
         }
     }
 
-    ~aligned_row_buffer(void)
+    ~aligned_row_buffer()
     {
         if (data_ != nullptr)
         {
@@ -413,36 +410,36 @@ public:
         }
     }
 
-    gsl_NODISCARD allocator_type
-    get_allocator(void) const noexcept
+    [[nodiscard]] allocator_type
+    get_allocator() const noexcept
     {
         return *this;
     }
 
-    gsl_NODISCARD std::size_t
-    rows(void) const noexcept
+    [[nodiscard]] std::size_t
+    rows() const noexcept
     {
         return rows_;
     }
-    gsl_NODISCARD std::size_t
-    columns(void) const noexcept
+    [[nodiscard]] std::size_t
+    columns() const noexcept
     {
         return cols_;
     }
 
-    gsl_NODISCARD std::size_t
-    size(void) const noexcept
+    [[nodiscard]] std::size_t
+    size() const noexcept
     {
         return rows();
     }
-    gsl_NODISCARD gsl::span<T>
+    [[nodiscard]] std::span<T>
     operator [](std::size_t i)
     {
         gsl_Expects(i < rows_);
 
         return { reinterpret_cast<T*>(&data_[i * bytesPerRow_]), cols_ };
     }
-    gsl_NODISCARD gsl::span<T const>
+    [[nodiscard]] std::span<T const>
     operator [](std::size_t i) const
     {
         gsl_Expects(i < rows_);
@@ -450,53 +447,53 @@ public:
         return { reinterpret_cast<T*>(&data_[i * bytesPerRow_]), cols_ };
     }
 
-    gsl_NODISCARD iterator
-    begin(void) noexcept
+    [[nodiscard]] iterator
+    begin() noexcept
     {
         return { data_, 0, cols_, bytesPerRow_ };
     }
-    gsl_NODISCARD const_iterator
-    begin(void) const noexcept
+    [[nodiscard]] const_iterator
+    begin() const noexcept
     {
         return { data_, 0, cols_, bytesPerRow_ };
     }
-    gsl_NODISCARD iterator
-    end(void) noexcept
+    [[nodiscard]] iterator
+    end() noexcept
     {
         return { data_, rows_, cols_, bytesPerRow_ };
     }
-    gsl_NODISCARD const_iterator
-    end(void) const noexcept
+    [[nodiscard]] const_iterator
+    end() const noexcept
     {
         return { data_, rows_, cols_, bytesPerRow_ };
     }
 
-    gsl_NODISCARD constexpr bool
-    empty(void) const noexcept
+    [[nodiscard]] constexpr bool
+    empty() const noexcept
     {
         return rows_ == 0;
     }
 
-    gsl_NODISCARD reference
-    front(void)
+    [[nodiscard]] reference
+    front()
     {
         gsl_Expects(!empty());
         return (*this)[0];
     }
-    gsl_NODISCARD const_reference
-    front(void) const
+    [[nodiscard]] const_reference
+    front() const
     {
         gsl_Expects(!empty());
         return (*this)[0];
     }
-    gsl_NODISCARD reference
-    back(void)
+    [[nodiscard]] reference
+    back()
     {
         gsl_Expects(!empty());
         return (*this)[size() - 1];
     }
-    gsl_NODISCARD const_reference
-    back(void) const
+    [[nodiscard]] const_reference
+    back() const
     {
         gsl_Expects(!empty());
         return (*this)[size() - 1];
@@ -504,7 +501,7 @@ public:
 };
 
 
-} // namespace sysmakeshift
+} // namespace patton
 
 
-#endif // INCLUDED_SYSMAKESHIFT_BUFFER_HPP_
+#endif // INCLUDED_PATTON_BUFFER_HPP_

@@ -1,4 +1,4 @@
-Copyright 2019, 2020 Moritz Beutel
+Copyright 2019, 2025 Moritz Beutel
 
 ### Boost Software License - Version 1.0 - August 17th, 2003
 

@@ -1,25 +1,23 @@
 
-#ifndef INCLUDED_SYSMAKESHIFT_DETAIL_MEMORY_HPP_
-#define INCLUDED_SYSMAKESHIFT_DETAIL_MEMORY_HPP_
+#ifndef INCLUDED_PATTON_DETAIL_MEMORY_HPP_
+#define INCLUDED_PATTON_DETAIL_MEMORY_HPP_
 
 
 #include <limits>
-#include <cstdint>     // for uint32_t
-#include <cstddef>     // for size_t, ptrdiff_t, max_align_t
-#include <utility>     // for forward<>()
-#include <type_traits> // for integral_constant<>, declval<>()
-#include <memory>      // for allocator_traits<>
+#include <memory>       // for allocator_traits<>
+#include <cstdint>      // for uint32_t
+#include <cstddef>      // for size_t, ptrdiff_t, max_align_t
+#include <utility>      // for forward<>()
+#include <type_traits>  // for integral_constant<>, declval<>(), void_t<>, negation<>
 
-#include <gsl-lite/gsl-lite.hpp> // for void_t<>, negation<>
+#include <gsl-lite/gsl-lite.hpp>
 
-#include <sysmakeshift/detail/transaction.hpp>
+#include <patton/detail/transaction.hpp>
 
 
-namespace sysmakeshift {
-
+namespace patton {
 
 namespace gsl = ::gsl_lite;
-
 
 namespace detail {
 
@@ -35,12 +33,12 @@ template <typename T, std::ptrdiff_t N> struct extent_only<T[N]> : std::integral
 template <typename T> constexpr std::ptrdiff_t extent_only_v = extent_only<T>::value;
 
 template <typename A, typename = void> struct has_member_provides_static_alignment : std::false_type { };
-template <typename A> struct has_member_provides_static_alignment<A, gsl::void_t<decltype(A::provides_static_alignment(std::declval<std::size_t>()))>>
+template <typename A> struct has_member_provides_static_alignment<A, std::void_t<decltype(A::provides_static_alignment(std::declval<std::size_t>()))>>
     : std::is_convertible<decltype(A::provides_static_alignment(std::declval<std::size_t>())), bool> { };
 
 
-constexpr std::size_t
-floor_2p(std::size_t x)
+std::size_t
+constexpr floor_2p(std::size_t x)
 {
     x |= x >> 1;
     x |= x >> 2;
@@ -57,8 +55,8 @@ floor_2p(std::size_t x)
 constexpr std::size_t special_alignments = std::size_t(-1) & ~(std::size_t(-1) >> 3);
 
 
-constexpr std::size_t
-raw_alignment_in_bytes(std::size_t a) noexcept
+std::size_t
+constexpr raw_alignment_in_bytes(std::size_t a) noexcept
 {
     return std::max(std::size_t(1), floor_2p(a));
 }
@@ -67,16 +65,16 @@ std::size_t
 alignment_in_bytes(std::size_t a) noexcept;
 
 template <typename T>
-constexpr bool
-is_alignment_power_of_2(T value) noexcept
+bool
+constexpr is_alignment_power_of_2(T value) noexcept
 {
     return value > 0
         && (value & (value - 1)) == 0;
 }
 
 
-constexpr bool
-provides_static_alignment(std::size_t alignmentProvided, std::size_t alignmentRequested) noexcept
+bool
+constexpr provides_static_alignment(std::size_t alignmentProvided, std::size_t alignmentRequested) noexcept
 {
     std::size_t basicAlignmentProvided = alignmentProvided & ~special_alignments;
     std::size_t basicAlignmentRequested = alignmentRequested & ~special_alignments;
@@ -94,8 +92,8 @@ provides_static_alignment(std::size_t alignmentProvided, std::size_t alignmentRe
 std::size_t
 lookup_special_alignments(std::size_t a) noexcept;
 
-inline bool
-provides_dynamic_alignment(std::size_t alignmentProvided, std::size_t alignmentRequested) noexcept
+bool
+inline provides_dynamic_alignment(std::size_t alignmentProvided, std::size_t alignmentRequested) noexcept
 {
     return detail::alignment_in_bytes(alignmentProvided) >= detail::alignment_in_bytes(alignmentRequested);
 }
@@ -107,7 +105,7 @@ allocate(A& alloc, ArgsT&&... args)
 {
     T* ptr = std::allocator_traits<A>::allocate(alloc, 1);
     auto transaction = detail::make_transaction(
-        gsl::negation<std::is_nothrow_constructible<T, ArgsT...>>{ },
+        std::negation<std::is_nothrow_constructible<T, ArgsT...>>{ },
         [&alloc, ptr]
         {
             std::allocator_traits<A>::deallocate(alloc, ptr, 1);
@@ -187,13 +185,13 @@ class aligned_allocator_adaptor_base<T, Alignment, A, true> : public A
 public:
     using A::A;
 
-    gsl_NODISCARD static constexpr bool
-    provides_static_alignment(std::size_t a) noexcept
+    [[nodiscard]] bool
+    static constexpr provides_static_alignment(std::size_t a) noexcept
     {
         return detail::provides_static_alignment(Alignment, a);
     }
 
-    gsl_NODISCARD T*
+    [[nodiscard]] T*
     allocate(std::size_t n)
     {
         std::size_t a = detail::alignment_in_bytes(Alignment | alignof(T));
@@ -247,7 +245,7 @@ public:
 
 } // namespace detail
 
-} // namespace sysmakeshift
+} // namespace patton
 
 
-#endif // INCLUDED_SYSMAKESHIFT_DETAIL_MEMORY_HPP_
+#endif // INCLUDED_PATTON_DETAIL_MEMORY_HPP_

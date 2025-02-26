@@ -1,5 +1,5 @@
 
-#include <sysmakeshift/new.hpp>
+#include <patton/new.hpp>
 
 #include <iostream>
 
@@ -15,7 +15,7 @@ constexpr bool is_power_of_2(std::size_t value) noexcept
 
 TEST_CASE("hardware_cache_line_size() returns correct value")
 {
-    std::size_t cacheLineSize = sysmakeshift::hardware_cache_line_size();
+    std::size_t cacheLineSize = patton::hardware_cache_line_size();
     std::cout << "Cache line size: " << cacheLineSize << " B\n";
 
     CHECK(is_power_of_2(cacheLineSize));
@@ -26,7 +26,7 @@ TEST_CASE("hardware_cache_line_size() returns correct value")
 
 TEST_CASE("hardware_page_size() returns correct value")
 {
-    std::size_t pageSize = sysmakeshift::hardware_page_size();
+    std::size_t pageSize = patton::hardware_page_size();
     std::cout << "Page size: " << pageSize << " B\n";
 
     CHECK(is_power_of_2(pageSize));
@@ -37,7 +37,7 @@ TEST_CASE("hardware_page_size() returns correct value")
 
 TEST_CASE("hardware_large_page_size() returns sane value")
 {
-    std::size_t largePageSize = sysmakeshift::hardware_large_page_size();
+    std::size_t largePageSize = patton::hardware_large_page_size();
     std::cout << "Large page size: " << largePageSize << " B\n";
 
     if (largePageSize != 0) CHECK(is_power_of_2(largePageSize));

@@ -1,7 +1,7 @@
 
-#include <thread>// for thread::hardware_concurrency()
+#include <thread>  // for thread::hardware_concurrency()
 
-#include <sysmakeshift/thread.hpp>
+#include <patton/thread.hpp>
 
 #include <iostream>
 
@@ -12,7 +12,7 @@
 
 TEST_CASE("physical_concurrency() returns correct value")
 {
-    int physicalConcurrency = sysmakeshift::physical_concurrency();
+    unsigned physicalConcurrency = patton::physical_concurrency();
     std::cout << "Hardware concurrency: " << std::thread::hardware_concurrency() << " cores\n";
     std::cout << "Physical concurrency: " << physicalConcurrency << " cores\n";
 
@@ -22,8 +22,8 @@ TEST_CASE("physical_concurrency() returns correct value")
 
 TEST_CASE("physical_core_ids() returns correct number of thread ids")
 {
-    int physicalConcurrency = sysmakeshift::physical_concurrency();
-    auto physicalCoreIds = sysmakeshift::physical_core_ids();
+    unsigned physicalConcurrency = patton::physical_concurrency();
+    auto physicalCoreIds = patton::physical_core_ids();
     std::cout << "Physical core ids: [";
     bool first = true;
     for (auto id : physicalCoreIds)

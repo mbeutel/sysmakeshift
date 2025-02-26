@@ -1,15 +1,13 @@
 
-#ifndef INCLUDED_SYSMAKESHIFT_DETAIL_TRANSACTION_HPP_
-#define INCLUDED_SYSMAKESHIFT_DETAIL_TRANSACTION_HPP_
+#ifndef INCLUDED_PATTON_DETAIL_TRANSACTION_HPP_
+#define INCLUDED_PATTON_DETAIL_TRANSACTION_HPP_
 
 
-#include <utility>     // for move(), exchange()
-#include <type_traits> // for integral_constant<>
+#include <utility>      // for move(), exchange()
+#include <type_traits>  // for integral_constant<>
 
 
-namespace sysmakeshift {
-
-namespace detail {
+namespace patton::detail {
 
 
     // TODO: Should this be in gsl-lite? B. Stroustrup rightfully claims that `on_success()`, `on_error()`, and `finally()` are the elementary operations here, but
@@ -25,7 +23,7 @@ public:
         : RollbackFuncT(std::move(rollbackFunc)), done_(false)
     {
     }
-    ~transaction_t(void)
+    ~transaction_t()
     {
         if (!done_)
         {
@@ -34,7 +32,7 @@ public:
     }
 
     constexpr void
-    commit(void) noexcept
+    commit() noexcept
     {
         done_ = true;
     }
@@ -50,11 +48,11 @@ public:
 class no_op_transaction_t
 {
 public:
-    constexpr void commit(void) noexcept
+    constexpr void commit() noexcept
     {
     }
 
-    no_op_transaction_t(void) noexcept = default;
+    no_op_transaction_t() noexcept = default;
 
     no_op_transaction_t(no_op_transaction_t&&) = default;
     no_op_transaction_t& operator =(no_op_transaction_t&&) = delete;
@@ -79,9 +77,7 @@ make_transaction(std::false_type /*enableRollback*/, RollbackFuncT)
 }
 
 
-} // namespace detail
-
-} // namespace sysmakeshift
+} // namespace patton::detail
 
 
-#endif // INCLUDED_SYSMAKESHIFT_DETAIL_TRANSACTION_HPP_
+#endif // INCLUDED_PATTON_DETAIL_TRANSACTION_HPP_

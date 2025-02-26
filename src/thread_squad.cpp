@@ -8,14 +8,14 @@
 #endif // DEBUG_WAIT_CHAIN
 
 #include <string>
-#include <cstddef>            // for size_t, ptrdiff_t
-#include <cstring>            // for wcslen(), swprintf()
-#include <utility>            // for move()
-#include <memory>             // for unique_ptr<>
-#include <algorithm>          // for min(), max()
-#include <exception>          // for terminate()
-#include <stdexcept>          // for range_error
-#include <type_traits>        // for remove_pointer<>
+#include <cstddef>             // for size_t, ptrdiff_t
+#include <cstring>             // for wcslen(), swprintf()
+#include <utility>             // for move()
+#include <memory>              // for unique_ptr<>
+#include <algorithm>           // for min(), max()
+#include <exception>           // for terminate()
+#include <stdexcept>           // for range_error
+#include <type_traits>         // for remove_pointer<>
 #include <system_error>
 #include <thread>
 #include <atomic>
@@ -26,15 +26,15 @@
 # ifndef NOMINMAX
 #  define NOMINMAX
 # endif
-# include <Windows.h> // GetLastError(), SetThreadAffinityMask()
-# include <process.h> // _beginthreadex()
+# include <Windows.h>  // GetLastError(), SetThreadAffinityMask()
+# include <process.h>  // _beginthreadex()
 #elif defined(__linux__) || defined(__APPLE__)
 # define USE_PTHREAD
 # ifdef __linux__
 #  define USE_PTHREAD_SETAFFINITY
 # endif
 # include <cerrno>
-# include <pthread.h> // pthread_self(), pthread_setaffinity_np()
+# include <pthread.h>  // pthread_self(), pthread_setaffinity_np()
 #else
 # error Unsupported operating system.
 #endif
@@ -47,15 +47,15 @@
 # define THREAD_PINNING_SUPPORTED
 #endif // defined(_WIN32) || defined(USE_PTHREAD_SETAFFINITY)
 
-#include <gsl-lite/gsl-lite.hpp> // for narrow_failfast<>(), narrow_cast<>(), span<>
+#include <gsl-lite/gsl-lite.hpp>  // for index, narrow_failfast<>(), narrow_cast<>()
 
-#include <sysmakeshift/thread_squad.hpp>
-#include <sysmakeshift/buffer.hpp>      // for aligned_buffer<>
+#include <patton/buffer.hpp>        // for aligned_buffer<>
+#include <patton/thread_squad.hpp>
 
-#include <sysmakeshift/detail/errors.hpp>
+#include <patton/detail/errors.hpp>
 
 
-namespace sysmakeshift {
+namespace patton {
 
 namespace detail {
 
@@ -69,10 +69,10 @@ constexpr DWORD MS_VC_EXCEPTION = 0x406D1388;
 #pragma pack(push,8)
 typedef struct tagTHREADNAME_INFO
 {
-    DWORD dwType; // Must be 0x1000.
-    LPCSTR szName; // Pointer to name (in user address space).
-    DWORD dwThreadId; // Thread ID (-1 implies caller thread).
-    DWORD dwFlags; // Reserved for future use, must be zero.
+    DWORD dwType;      // Must be 0x1000.
+    LPCSTR szName;     // Pointer to name (in user address space).
+    DWORD dwThreadId;  // Thread ID (-1 implies caller thread).
+    DWORD dwFlags;     // Reserved for future use, must be zero.
 } THREADNAME_INFO;
 #pragma pack(pop)
 
@@ -87,8 +87,8 @@ setThreadNameViaException(DWORD dwThreadId, const char* threadName)
     info.dwThreadId = dwThreadId;
     info.dwFlags = 0;
 #pragma warning(push)
-# pragma warning(disable: 6320) // C6320: exception-filter expression is the constant EXCEPTION_EXECUTE_HANDLER. This may mask exceptions that were not intended to be handled
-# pragma warning(disable: 6322) // C6322: empty __except block
+# pragma warning(disable: 6320)  // C6320: exception-filter expression is the constant EXCEPTION_EXECUTE_HANDLER. This may mask exceptions that were not intended to be handled
+# pragma warning(disable: 6322)  // C6322: empty __except block
     __try
     {
         ::RaiseException(MS_VC_EXCEPTION, 0, sizeof info / sizeof(ULONG_PTR), (ULONG_PTR*) &info);
@@ -108,7 +108,7 @@ setCurrentThreadDescription(const wchar_t* threadDescription)
     {
         HMODULE hKernel32 = ::GetModuleHandleW(L"kernel32.dll");
         gsl_Expects(hKernel32 != NULL);
-        return (SetThreadDescriptionType*) ::GetProcAddress(hKernel32, "SetThreadDescriptionType"); // available since Windows 10 1607 or Windows Server 2016
+        return (SetThreadDescriptionType*) ::GetProcAddress(hKernel32, "SetThreadDescriptionType");  // available since Windows 10 1607 or Windows Server 2016
     }();
 
     if (setThreadDescription != nullptr)
@@ -135,7 +135,7 @@ private:
     cpu_set_t* data_;
 
 public:
-    cpu_set(void)
+    cpu_set()
         : cpuCount_(std::thread::hardware_concurrency())
     {
         data_ = CPU_ALLOC(cpuCount_);
@@ -147,12 +147,12 @@ public:
         CPU_ZERO_S(lsize, data_);
     }
     std::size_t
-    size(void) const noexcept
+    size() const noexcept
     {
         return CPU_ALLOC_SIZE(cpuCount_);
     }
     const cpu_set_t*
-    data(void) const noexcept
+    data() const noexcept
     {
         return data_;
     }
@@ -163,7 +163,7 @@ public:
         std::size_t lsize = size();
         CPU_SET_S(coreIdx, lsize, data_);
     }
-    ~cpu_set(void)
+    ~cpu_set()
     {
         CPU_FREE(data_);
     }
@@ -176,7 +176,7 @@ public:
 setThreadAffinity(std::thread::native_handle_type handle, std::size_t coreIdx)
 {
 # if defined(_WIN32)
-    if (coreIdx >= sizeof(DWORD_PTR) * 8) // bits per byte
+    if (coreIdx >= sizeof(DWORD_PTR) * 8)  // bits per byte
     {
         throw std::range_error("cannot currently handle more than 8*sizeof(void*) CPUs on Windows");
     }
@@ -219,23 +219,23 @@ private:
 
 public:
     pthread_t
-    get(void) const noexcept
+    get() const noexcept
     {
         return handle_;
     }
     pthread_t
-    release(void) noexcept
+    release() noexcept
     {
         return std::exchange(handle_, { });
     }
 
     explicit
-    operator bool(void) const noexcept
+    operator bool() const noexcept
     {
         return handle_ != pthread_t{ };
     }
 
-    pthread_handle(void)
+    pthread_handle()
         : handle_{ }
     {
     }
@@ -260,7 +260,7 @@ public:
         }
         return *this;
     }
-    ~pthread_handle(void)
+    ~pthread_handle()
     {
         if (handle_ != pthread_t{ })
         {
@@ -273,11 +273,11 @@ struct PThreadAttr
 {
     pthread_attr_t attr;
 
-    PThreadAttr(void)
+    PThreadAttr()
     {
         detail::posix_check(::pthread_attr_init(&attr));
     }
-    ~PThreadAttr(void)
+    ~PThreadAttr()
     {
         detail::posix_check(::pthread_attr_destroy(&attr));
     }
@@ -289,22 +289,22 @@ struct PThreadAttr
 
 #if defined(__i386__) || defined(__x86_64__) || defined(_M_IX86) || defined(_M_X64)
 static inline void
-pause(void)
+pause()
 {
     _mm_pause();
 }
 #else
 static inline void
-pause(void)
+pause()
 {
     [[maybe_unused]] volatile int v = 0;
 }
 #endif // defined(__i386__) || defined(__x86_64__) || defined(_M_IX86) || defined(_M_X64)
 
-constexpr int spinCount = 6; // 4 or 6
-constexpr int spinRep = 1; // 2 or 1
+constexpr int spinCount = 6;  // 4 or 6
+constexpr int spinRep = 1;  // 2 or 1
 constexpr int pauseCountExp = 9;
-constexpr int yieldCountExp = 0; // 6
+constexpr int yieldCountExp = 0;  // 6
 
 template <typename T>
 bool
@@ -348,10 +348,10 @@ wait_and_load(
 {
     if (!detail::wait_equal_exponential_backoff(a, oldValue, spinWait))
     {
-        auto lock = std::unique_lock(mutex); // implicit acquire
+        auto lock = std::unique_lock(mutex);  // implicit acquire
         while (a.load(std::memory_order_relaxed) == oldValue)
         {
-            cv.wait(lock); // implicit release/acquire
+            cv.wait(lock);  // implicit release/acquire
         }
         // implicit release in destructor of `lock`
     }
@@ -370,7 +370,7 @@ toggle_and_notify(
     T oldValue = a.load(std::memory_order_relaxed);
     T newValue = 1 ^ oldValue;
     {
-        auto lock = std::lock_guard(mutex); // implicit acquire
+        auto lock = std::lock_guard(mutex);  // implicit acquire
         a.store(newValue, std::memory_order_release);
         // implicit release in destructor of `lock`
     }
@@ -401,13 +401,13 @@ private:
     std::size_t coreAffinity_;
 
 public:
-    os_thread(void)
+    os_thread()
         : coreAffinity_{ std::size_t(-1) }
     {
     }
 
     bool
-    is_running(void) const noexcept
+    is_running() const noexcept
     {
 #if defined(_WIN32)
         return handle_ != nullptr;
@@ -478,11 +478,11 @@ public:
 
 #ifdef THREAD_PINNING_SUPPORTED
 static std::size_t
-get_hardware_thread_id(int threadIdx, int maxNumHardwareThreads, gsl::span<int const> hardwareThreadMappings)
+get_hardware_thread_id(int threadIdx, int maxNumHardwareThreads, std::span<int const> hardwareThreadMappings)
 {
     gsl_Expects(threadIdx >= 0);
     gsl_Expects(maxNumHardwareThreads > 0);
-    gsl_Expects(hardwareThreadMappings.empty() || maxNumHardwareThreads <= gsl::ssize(hardwareThreadMappings));
+    gsl_Expects(hardwareThreadMappings.empty() || maxNumHardwareThreads <= std::ssize(hardwareThreadMappings));
 
     auto subidx = threadIdx % maxNumHardwareThreads;
     return gsl::narrow_failfast<std::size_t>(
@@ -542,21 +542,21 @@ public:
         }
 
         void
-        notify_subthreads(void) noexcept
+        notify_subthreads() noexcept
         {
             int numThreadsToWake = threadSquad_.num_threads_for_task();
             threadSquad_.notify_subthreads(threadIdx_, numThreadsToWake);
         }
 
         void
-        wait_for_subthreads(void) noexcept
+        wait_for_subthreads() noexcept
         {
             int numThreadsToWaitFor = threadSquad_.num_threads_for_task();
             threadSquad_.wait_for_subthreads(threadIdx_, numThreadsToWaitFor);
         }
 
         task
-        task_wait(void) noexcept
+        task_wait() noexcept
         {
             auto& notifyData = threadSquad_.threadNotifyData_[threadIdx_];
             auto oldSense = sense_.load(std::memory_order_relaxed);
@@ -577,7 +577,7 @@ public:
         }
 
         void
-        task_signal_completion(void) noexcept
+        task_signal_completion() noexcept
         {
             THREAD_SQUAD_DBG("thread squad #%u, thread %d: signaling\n", threadSquad_.threadSquadId_, threadIdx_);
             auto& notifyData = threadSquad_.threadNotifyData_[threadIdx_];
@@ -585,13 +585,13 @@ public:
         }
 
         int
-        thread_idx(void) const noexcept
+        thread_idx() const noexcept
         {
             return threadIdx_;
         }
 
         unsigned
-        thread_squad_id(void) const noexcept
+        thread_squad_id() const noexcept
         {
             return threadSquad_.threadSquadId_;
         }
@@ -622,11 +622,11 @@ private:
     task task_;
 
         // debugging data
-    unsigned threadSquadId_; // for runtime thread identification during debugging
+    unsigned threadSquadId_;  // for runtime thread identification during debugging
 
 
     int
-    num_threads_for_task(void) const noexcept
+    num_threads_for_task() const noexcept
     {
         return task_.terminationRequested
             ? numThreads
@@ -717,13 +717,13 @@ public:
     }
 
     bool
-    is_running(void) const noexcept
+    is_running() const noexcept
     {
         return threadData_[0].osThread_.is_running();
     }
 
     void
-    fork_all_threads(void)
+    fork_all_threads()
     {
         int numThreadsToWake = num_threads_for_task();
         for (int i = 0; i < numThreadsToWake; ++i)
@@ -739,7 +739,7 @@ public:
     }
 
     void
-    join_all_threads(void)
+    join_all_threads()
     {
         for (gsl::index i = 0; i < numThreads; ++i)
         {
@@ -780,7 +780,7 @@ public:
 
     void
     store_task(task _task)
-    noexcept // We cannot really handle exceptions here.
+    noexcept  // We cannot really handle exceptions here.
     {
         gsl_Expects(_task.action || _task.terminationRequested);
 
@@ -788,13 +788,13 @@ public:
     }
 
     void
-    release_task(void)
+    release_task()
     {
         task_.action = { };
     }
 
     unsigned
-    id(void) const noexcept
+    id() const noexcept
     {
         return threadSquadId_;
     }
@@ -849,7 +849,7 @@ run_thread(thread_squad_impl::thread_data& threadData)
 static void
 run(thread_squad_impl& self,
     std::function<void(thread_squad::task_context)> action, int concurrency, bool join)
-noexcept // We cannot really handle exceptions here.
+noexcept  // We cannot really handle exceptions here.
 {
     gsl_Expects(action || join);
 
@@ -885,7 +885,7 @@ thread_squad_thread_func(void* ctx)
     auto& threadData = thread_squad_impl::thread_data::from_thread_context(ctx);
     {
         wchar_t buf[64];
-        std::swprintf(buf, sizeof buf / sizeof(wchar_t), L"sysmakeshift thread squad #%u, thread %d",
+        std::swprintf(buf, sizeof buf / sizeof(wchar_t), L"patton thread squad #%u, thread %d",
             threadData.thread_squad_id(), threadData.thread_idx());
         detail::setCurrentThreadDescription(buf);
     }
@@ -913,7 +913,7 @@ thread_squad_thread_func(void* ctx)
         detail::posix_check(::pthread_setname_np(::pthread_self(), buf));
 #elif defined(__APPLE__)
         char buf[64];
-        std::sprintf(buf, "sysmakeshift thread squad #%u, thread %d",
+        std::sprintf(buf, "patton thread squad #%u, thread %d",
             threadData.thread_squad_id(), threadData.thread_idx());
         detail::posix_check(::pthread_setname_np(buf));
 #endif
@@ -988,4 +988,4 @@ thread_squad::do_run(std::function<void(task_context)> action, int concurrency, 
 }
 
 
-} // namespace sysmakeshift
+} // namespace patton

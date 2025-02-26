@@ -1,9 +1,10 @@
 
-#ifndef INCLUDED_SYSMAKESHIFT_DETAIL_BUFFER_HPP_
-#define INCLUDED_SYSMAKESHIFT_DETAIL_BUFFER_HPP_
+#ifndef INCLUDED_PATTON_DETAIL_BUFFER_HPP_
+#define INCLUDED_PATTON_DETAIL_BUFFER_HPP_
 
 
 #include <memory>       // for allocator_traits<>
+#include <compare>
 #include <cstddef>      // for size_t, ptrdiff_t
 #include <iterator>     // for input_iterator_tag, output_iterator_tag, random_access_iterator_tag
 #include <type_traits>  // for integral_constant<>, enable_if<>, is_const<>, is_same<>, is_nothrow_default_constructible<>
@@ -11,8 +12,7 @@
 #include <gsl-lite/gsl-lite.hpp> // for gsl_Expects()
 
 
-namespace sysmakeshift {
-
+namespace patton {
 
 namespace gsl = ::gsl_lite;
 
@@ -24,7 +24,9 @@ template <typename T, std::size_t Alignment, typename A>
 class aligned_row_buffer;
 
 
-namespace detail {
+}  // namespace patton
+
+namespace patton::detail {
 
 
 template <typename T, typename A, typename... Ts>
@@ -135,7 +137,7 @@ noexcept
 template <typename T>
 class aligned_buffer_iterator
 {
-    template <typename, std::size_t, typename> friend class sysmakeshift::aligned_buffer;
+    template <typename, std::size_t, typename> friend class patton::aligned_buffer;
 
 private:
     char* data_;
@@ -148,7 +150,7 @@ private:
     }
 
 public:
-    constexpr aligned_buffer_iterator(void) noexcept
+    constexpr aligned_buffer_iterator() noexcept
         : data_(nullptr), index_(0), bytesPerElement_(0)
     {
     }
@@ -173,68 +175,46 @@ public:
         bytesPerElement_ = rhs.bytesPerElement_;
     }
 
-#ifdef __cpp_lib_concepts
     using iterator_concept  = std::random_access_iterator_tag;
-#endif // __cpp_lib_concepts
     using iterator_category = std::random_access_iterator_tag;
     using value_type        = T;
     using difference_type   = std::ptrdiff_t;
     using pointer           = T*;
     using reference         = T&;
 
-    friend bool
-    operator ==(aligned_buffer_iterator const& lhs, aligned_buffer_iterator const& rhs)
+    bool
+    operator ==(aligned_buffer_iterator const& rhs) const
     {
-        gsl_Expects(lhs.data_ == rhs.data_);
+        gsl_Expects(data_ == rhs.data_);
 
-        return lhs.index_ == rhs.index_;
+        return index_ == rhs.index_;
     }
-    friend bool
-    operator !=(aligned_buffer_iterator const& lhs, aligned_buffer_iterator const& rhs)
+    auto
+    operator <=>(aligned_buffer_iterator const& rhs) const
     {
-        return !(lhs == rhs);
-    }
-    friend bool
-    operator <(aligned_buffer_iterator const& lhs, aligned_buffer_iterator const& rhs)
-    {
-        gsl_Expects(lhs.data_ == rhs.data_);
+        gsl_Expects(data_ == rhs.data_);
 
-        return lhs.index_ < rhs.index_;
-    }
-    friend bool
-    operator >(aligned_buffer_iterator const& lhs, aligned_buffer_iterator const& rhs)
-    {
-        return rhs < lhs;
-    }
-    friend bool
-    operator <=(aligned_buffer_iterator const& lhs, aligned_buffer_iterator const& rhs)
-    {
-        return !(rhs < lhs);
-    }
-    friend bool
-    operator >=(aligned_buffer_iterator const& lhs, aligned_buffer_iterator const& rhs)
-    {
-        return !(lhs < rhs);
+        return index_ <=> rhs.index_;
     }
 
-    gsl_NODISCARD reference
-    operator *(void) const
+    [[nodiscard]] reference
+    operator *() const
     {
         return *const_cast<T*>(reinterpret_cast<T const*>(data_ + index_ * bytesPerElement_));
     }
-    gsl_NODISCARD pointer
-    operator ->(void) const
+    [[nodiscard]] pointer
+    operator ->() const
     {
         return &**this;
     }
     aligned_buffer_iterator&
-    operator ++(void)
+    operator ++()
     {
         ++index_;
         return *this;
     }
     aligned_buffer_iterator&
-    operator --(void)
+    operator --()
     {
         --index_;
         return *this;
@@ -301,7 +281,7 @@ struct input_output_iterator_tag : std::input_iterator_tag, std::output_iterator
 template <typename T>
 class aligned_row_buffer_iterator
 {
-    template <typename, std::size_t, typename> friend class sysmakeshift::aligned_row_buffer;
+    template <typename, std::size_t, typename> friend class patton::aligned_row_buffer;
 
 private:
     char* data_;
@@ -315,7 +295,7 @@ private:
     }
 
 public:
-    constexpr aligned_row_buffer_iterator(void) noexcept
+    constexpr aligned_row_buffer_iterator() noexcept
         : data_(nullptr), index_(0), cols_(0), bytesPerRow_(0)
     {
     }
@@ -341,62 +321,40 @@ public:
         bytesPerRow_ = rhs.bytesPerRow_;
     }
 
-#ifdef __cpp_lib_concepts
-    using iterator_concept  = std::random_access_iterator_tag; // TODO: is this true?
-#endif // __cpp_lib_concepts
+    using iterator_concept  = std::random_access_iterator_tag;
     using iterator_category = input_output_iterator_tag;
-    using value_type        = gsl::span<T>;
+    using value_type        = std::span<T>;
     using difference_type   = std::ptrdiff_t;
-    using reference         = gsl::span<T>;
+    using reference         = std::span<T>;
 
-    friend bool
-    operator ==(aligned_row_buffer_iterator const& lhs, aligned_row_buffer_iterator const& rhs)
+    bool
+    operator ==(aligned_row_buffer_iterator const& rhs) const
     {
-        gsl_Expects(lhs.data_ == rhs.data_);
+        gsl_Expects(data_ == rhs.data_);
 
-        return lhs.index_ == rhs.index_;
+        return index_ == rhs.index_;
     }
-    friend bool
-    operator !=(aligned_row_buffer_iterator const& lhs, aligned_row_buffer_iterator const& rhs)
+    auto
+    operator <=>(aligned_row_buffer_iterator const& rhs) const
     {
-        return !(lhs == rhs);
-    }
-    friend bool
-    operator <(aligned_row_buffer_iterator const& lhs, aligned_row_buffer_iterator const& rhs)
-    {
-        gsl_Expects(lhs.data_ == rhs.data_);
+        gsl_Expects(data_ == rhs.data_);
 
-        return lhs.index_ < rhs.index_;
-    }
-    friend bool
-    operator >(aligned_row_buffer_iterator const& lhs, aligned_row_buffer_iterator const& rhs)
-    {
-        return rhs < lhs;
-    }
-    friend bool
-    operator <=(aligned_row_buffer_iterator const& lhs, aligned_row_buffer_iterator const& rhs)
-    {
-        return !(rhs < lhs);
-    }
-    friend bool
-    operator >=(aligned_row_buffer_iterator const& lhs, aligned_row_buffer_iterator const& rhs)
-    {
-        return !(lhs < rhs);
+        return index_ <=> rhs.index_;
     }
 
-    gsl_NODISCARD reference
-    operator *(void) const
+    [[nodiscard]] reference
+    operator *() const
     {
         return { const_cast<T*>(reinterpret_cast<T const*>(data_ + index_ * bytesPerRow_)), cols_ };
     }
     aligned_row_buffer_iterator&
-    operator ++(void)
+    operator ++()
     {
         ++index_;
         return *this;
     }
     aligned_row_buffer_iterator&
-    operator --(void)
+    operator --()
     {
         --index_;
         return *this;
@@ -458,9 +416,7 @@ public:
 };
 
 
-} // namespace detail
-
-} // namespace sysmakeshift
+} // namespace patton::detail
 
 
-#endif // INCLUDED_SYSMAKESHIFT_DETAIL_BUFFER_HPP_
+#endif // INCLUDED_PATTON_DETAIL_BUFFER_HPP_

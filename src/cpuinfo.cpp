@@ -1,14 +1,15 @@
 
 #include <new>
+#include <span>
 #include <atomic>
-#include <memory>    // for unique_ptr<>
+#include <memory>     // for unique_ptr<>
 #include <string>
 #include <vector>
-#include <cstddef>   // for ptrdiff_t
+#include <cstddef>    // for ptrdiff_t
 #include <fstream>
 #include <iostream>
-#include <stdexcept> // for runtime_error
-#include <algorithm> // for sort(), unique()
+#include <stdexcept>  // for runtime_error
+#include <algorithm>  // for sort(), unique()
 
 #if defined(_WIN32)
 # ifndef NOMINMAX
@@ -27,14 +28,12 @@
 # error Unsupported operating system.
 #endif
 
-#include <gsl-lite/gsl-lite.hpp> // for dim, ssize(), gsl_ExpectsAudit(), narrow_failfast<>()
+#include <gsl-lite/gsl-lite.hpp>  // for dim, gsl_ExpectsAudit(), narrow_failfast<>()
 
-#include <sysmakeshift/detail/errors.hpp>
+#include <patton/detail/errors.hpp>
 
 
-namespace sysmakeshift {
-
-namespace detail {
+namespace patton::detail {
 
 
 struct cpu_info
@@ -95,7 +94,7 @@ lowest_bit_set(T x)
 }
 
 void
-init_cpu_info(void) noexcept
+init_cpu_info() noexcept
 {
     auto initFunc = []
     {
@@ -132,7 +131,7 @@ init_cpu_info(void) noexcept
                 }
                 else if (newCacheLineSize != pSlpi[i].Cache.LineSize)
                 {
-                    throw std::runtime_error("GetLogicalProcessorInformation() reports different L1 cache line sizes for different cores"); // ...and we cannot handle that
+                    throw std::runtime_error("GetLogicalProcessorInformation() reports different L1 cache line sizes for different cores");  // ...and we cannot handle that
                 }
             }
         }
@@ -155,7 +154,7 @@ init_cpu_info(void) noexcept
 #elif defined(__linux__)
             // I can't believe that parsing /proc/cpuinfo is the accepted way to query the number of physical cores.
         auto f = std::ifstream("/proc/cpuinfo");
-        if (!f) throw std::runtime_error("cannot open /proc/cpuinfo"); // something is really wrong if we cannot open that file
+        if (!f) throw std::runtime_error("cannot open /proc/cpuinfo");  // something is really wrong if we cannot open that file
         auto ids = std::vector<physical_core_id>{ };
         auto line = std::string{ };
         int lastProcessor = -1;
@@ -246,12 +245,14 @@ init_cpu_info(void) noexcept
 }
 
 
-} // namespace detail
+} // namespace patton::detail
+
+namespace patton {
 
 
 #if defined(_WIN32)
 std::size_t
-hardware_cache_line_size(void) noexcept
+hardware_cache_line_size() noexcept
 {
     auto cacheLineSize = detail::cpu_info_value.cache_line_size.load(std::memory_order_relaxed);
     if (cacheLineSize == 0)
@@ -264,7 +265,7 @@ hardware_cache_line_size(void) noexcept
 #endif // defined(_WIN32)
 
 unsigned
-physical_concurrency(void) noexcept
+physical_concurrency() noexcept
 {
     auto physicalConcurrency = detail::cpu_info_value.physical_concurrency.load(std::memory_order_relaxed);
     if (physicalConcurrency == 0)
@@ -275,8 +276,8 @@ physical_concurrency(void) noexcept
     return physicalConcurrency;
 }
 
-gsl::span<int const>
-physical_core_ids(void) noexcept
+std::span<int const>
+physical_core_ids() noexcept
 {
 #if defined(_WIN32) || defined(__linux__)
     auto physicalConcurrency = detail::cpu_info_value.physical_concurrency.load(std::memory_order_relaxed);
@@ -287,11 +288,11 @@ physical_core_ids(void) noexcept
         physicalConcurrency = detail::cpu_info_value.physical_concurrency.load(std::memory_order_relaxed);
         coreThreadIdsPtr = detail::cpu_info_value.core_thread_ids_ptr.load(std::memory_order_relaxed);
     }
-    return gsl::span<int const>(coreThreadIdsPtr, gsl::narrow_failfast<std::size_t>(physicalConcurrency));
+    return std::span<int const>(coreThreadIdsPtr, gsl::narrow_failfast<std::size_t>(physicalConcurrency));
 #else // ^^^ defined(_WIN32) || defined(__linux__) ^^^ / vvv !defined(_WIN32) && !defined(__linux__) vvv
     return { };
 #endif // defined(_WIN32) || defined(__linux__)
 }
 
 
-} // namespace sysmakeshift
+} // namespace patton

@@ -1,17 +1,18 @@
 
-#ifndef INCLUDED_SYSMAKESHIFT_THREAD_SQUAD_HPP_
-#define INCLUDED_SYSMAKESHIFT_THREAD_SQUAD_HPP_
+#ifndef INCLUDED_PATTON_THREAD_SQUAD_HPP_
+#define INCLUDED_PATTON_THREAD_SQUAD_HPP_
 
 
-#include <utility>    // for move()
-#include <functional> // for function<>
+#include <span>
+#include <utility>     // for move()
+#include <functional>  // for function<>
 
-#include <gsl-lite/gsl-lite.hpp> // for span<>, not_null<>, ssize(), gsl_NODISCARD
+#include <gsl-lite/gsl-lite.hpp>  // for not_null<>
 
-#include <sysmakeshift/detail/thread_squad.hpp>
+#include <patton/detail/thread_squad.hpp>
 
 
-namespace sysmakeshift {
+namespace patton {
 
 
 namespace gsl = ::gsl_lite;
@@ -57,7 +58,7 @@ public:
             // If non-empty and if `max_num_hardware_threads == 0`, `hardware_thread_mappings.size()` is taken as the maximal
             // number of hardware threads to pin threads to.
             //
-        gsl::span<int const> hardware_thread_mappings = { };
+        std::span<int const> hardware_thread_mappings = { };
     };
 
         //
@@ -80,8 +81,8 @@ public:
             //
             // The current thread index.
             //
-        gsl_NODISCARD int
-        thread_index(void) const noexcept
+        [[nodiscard]] int
+        thread_index() const noexcept
         {
             return threadIdx_;
         }
@@ -89,8 +90,8 @@ public:
             //
             // The number of concurrent threads.
             //
-        gsl_NODISCARD int
-        num_threads(void) const noexcept
+        [[nodiscard]] int
+        num_threads() const noexcept
         {
             return impl_.numThreads;
         }
@@ -105,8 +106,8 @@ private:
         gsl_Expects(p.num_threads >= 0);
         gsl_Expects(p.max_num_hardware_threads >= 0);
         gsl_Expects(p.num_threads == 0 || p.max_num_hardware_threads <= p.num_threads);
-        gsl_Expects(p.hardware_thread_mappings.empty() || (p.max_num_hardware_threads <= gsl::ssize(p.hardware_thread_mappings)
-            && p.num_threads <= gsl::ssize(p.hardware_thread_mappings)));
+        gsl_Expects(p.hardware_thread_mappings.empty() || (p.max_num_hardware_threads <= std::ssize(p.hardware_thread_mappings)
+            && p.num_threads <= std::ssize(p.hardware_thread_mappings)));
         return p;
     }
 
@@ -133,8 +134,8 @@ public:
         //
         // The number of concurrent threads.
         //
-    gsl_NODISCARD int
-    num_threads(void) const
+    [[nodiscard]] int
+    num_threads() const
     {
         return handle_->numThreads;
     }
@@ -201,7 +202,7 @@ public:
 };
 
 
-} // namespace sysmakeshift
+} // namespace patton
 
 
-#endif // INCLUDED_SYSMAKESHIFT_THREAD_SQUAD_HPP_
+#endif // INCLUDED_PATTON_THREAD_SQUAD_HPP_

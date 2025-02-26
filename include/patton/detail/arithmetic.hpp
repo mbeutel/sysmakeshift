@@ -1,16 +1,14 @@
 
-#ifndef INCLUDED_SYSMAKESHIFT_DETAIL_ARITHMETIC_HPP_
-#define INCLUDED_SYSMAKESHIFT_DETAIL_ARITHMETIC_HPP_
+#ifndef INCLUDED_PATTON_DETAIL_ARITHMETIC_HPP_
+#define INCLUDED_PATTON_DETAIL_ARITHMETIC_HPP_
 
 
 #include <limits>
-#include <type_traits>  // for common_type<>
-#include <system_error> // for errc
+#include <type_traits>   // for common_type<>
+#include <system_error>  // for errc
 
 
-namespace sysmakeshift {
-
-namespace detail {
+namespace patton::detail {
 
 
 template <typename T>
@@ -57,9 +55,7 @@ try_ceili(X x, D d)
 }
 
 
-} // namespace detail
-
-} // namespace sysmakeshift
+} // namespace patton::detail
 
 
-#endif // INCLUDED_SYSMAKESHIFT_DETAIL_ARITHMETIC_HPP_
+#endif // INCLUDED_PATTON_DETAIL_ARITHMETIC_HPP_

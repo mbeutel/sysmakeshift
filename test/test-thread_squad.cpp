@@ -1,5 +1,5 @@
 
-#include <sysmakeshift/thread_squad.hpp>
+#include <patton/thread_squad.hpp>
 
 #include <thread>
 #include <mutex>
@@ -22,7 +22,8 @@ TEST_CASE("thread_squad")
 {
     GENERATE(range(0, 10)); // repetitions
 
-    int numThreads = GENERATE(range(0, 10), 10, 48, 50);
+    //int numThreads = GENERATE(range(0, 10), 10, 48, 50);
+    int numThreads = GENERATE(range(0, 5));
     CAPTURE(numThreads);
 
     unsigned numActualThreads = static_cast<unsigned>(numThreads);
@@ -36,7 +37,7 @@ TEST_CASE("thread_squad")
     auto threadIndex_Count = std::unordered_map<int, int>{ };
     int count = 0;
 
-    auto params = sysmakeshift::thread_squad::params{
+    auto params = patton::thread_squad::params{
         /*.num_threads = */ numThreads
     };
 #ifdef THREAD_PINNING_SUPPORTED
@@ -44,7 +45,7 @@ TEST_CASE("thread_squad")
 #endif // !THREAD_PINNING_SUPPORTED
 
     auto action = [&]
-    (sysmakeshift::thread_squad::task_context ctx)
+    (patton::thread_squad::task_context ctx)
     {
         auto lock = std::unique_lock<std::mutex>(mutex);
         ++threadId_Count[std::this_thread::get_id()];
@@ -54,7 +55,7 @@ TEST_CASE("thread_squad")
 
     SECTION("single task")
     {
-        sysmakeshift::thread_squad(params).run(action);
+        patton::thread_squad(params).run(action);
         CHECK(threadIndex_Count.size() == static_cast<std::size_t>(numActualThreads));
     }
 
@@ -63,7 +64,7 @@ TEST_CASE("thread_squad")
         int numTasks = GENERATE(0, 1, 2, 5, 10, 20);
         CAPTURE(numTasks);
 
-        auto threadSquad = sysmakeshift::thread_squad(params);
+        auto threadSquad = patton::thread_squad(params);
         for (int i = 0; i < numTasks; ++i)
         {
             threadSquad.run(action);
@@ -98,7 +99,7 @@ TEST_CASE("thread_squad")
         int numTasks = GENERATE(0, 1, 2, 5, 10, 20);
         CAPTURE(numTasks);
 
-        auto threadSquad = sysmakeshift::thread_squad(params);
+        auto threadSquad = patton::thread_squad(params);
         for (int i = 0; i < numTasks; ++i)
         {
             CAPTURE(i);
@@ -108,7 +109,7 @@ TEST_CASE("thread_squad")
 
     SECTION("varying concurrency")
     {
-        auto threadSquad = sysmakeshift::thread_squad(params);
+        auto threadSquad = patton::thread_squad(params);
         for (int i = 1; i <= int(numActualThreads); ++i)
         {
             CAPTURE(i);

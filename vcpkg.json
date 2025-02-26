@@ -1,11 +1,10 @@
 {
-    "name": "sysmakeshift",
-    "version-string": "0.2.2",
-    "description": "still need to come up with something",
-    "homepage": "https://github.com/mbeutel/sysmakeshift",
+    "name": "patton",
+    "version-string": "1.0",
+    "description": "simple concurrency in C++",
+    "homepage": "https://github.com/mbeutel/patton",
     "license": " BSL-1.0",
     "dependencies": [
-        "catch2",
         "gsl-lite"
     ]
 }

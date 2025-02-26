@@ -1,5 +1,5 @@
 
-#include <sysmakeshift/thread_squad.hpp>
+#include <patton/thread_squad.hpp>
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/benchmark/catch_benchmark.hpp>
@@ -14,7 +14,7 @@
 
 TEST_CASE("thread_squad: create-run-destroy")
 {
-    auto params = sysmakeshift::thread_squad::params{
+    auto params = patton::thread_squad::params{
         /*.num_threads = */ global_benchmark_params.num_threads
     };
 #ifdef THREAD_PINNING_SUPPORTED
@@ -22,19 +22,19 @@ TEST_CASE("thread_squad: create-run-destroy")
 #endif // !THREAD_PINNING_SUPPORTED
 
     auto action = []
-    (sysmakeshift::thread_squad::task_context /*ctx*/)
+    (patton::thread_squad::task_context /*ctx*/)
     {
     };
 
     BENCHMARK("create-run-destroy")
     {
-        sysmakeshift::thread_squad(params).run(action);
+        patton::thread_squad(params).run(action);
     };
 }
 
 TEST_CASE("thread_squad: run")
 {
-    auto params = sysmakeshift::thread_squad::params{
+    auto params = patton::thread_squad::params{
         /*.num_threads = */ global_benchmark_params.num_threads
     };
 #ifdef THREAD_PINNING_SUPPORTED
@@ -42,11 +42,11 @@ TEST_CASE("thread_squad: run")
 #endif // !THREAD_PINNING_SUPPORTED
 
     auto action = []
-    (sysmakeshift::thread_squad::task_context /*ctx*/)
+    (patton::thread_squad::task_context /*ctx*/)
     {
     };
 
-    auto threadSquad = sysmakeshift::thread_squad(params);
+    auto threadSquad = patton::thread_squad(params);
 
     BENCHMARK("run")
     {
