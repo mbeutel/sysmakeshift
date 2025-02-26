@@ -4,11 +4,16 @@
 
 
 #include <new>
-#include <memory>  // for unique_ptr<>
+#include <memory>       // for unique_ptr<>
+#include <concepts>
+#include <type_traits>  // for invoke_result<>
 
 
 namespace patton::detail {
 
+
+template <typename F, typename T>
+concept reduction = std::invocable<F, T, T> && std::same_as<std::invoke_result_t<F, T, T>, T>;
 
 struct thread_squad_impl_base
 {
@@ -49,8 +54,8 @@ protected:
 public:
     thread_squad_task_params params;
 
-    virtual void execute(thread_squad_impl_base& impl, int i, int numRunningThreads) = 0;
-    virtual void merge(int iDst, int iSrc);
+    virtual void execute(thread_squad_impl_base& impl, int i, int numRunningThreads) noexcept = 0;
+    virtual void merge(int iDst, int iSrc) noexcept;
 };
 
 #ifdef _MSC_VER
@@ -71,7 +76,7 @@ public:
     ~thread_squad_action() = default;
 
     void
-    execute(thread_squad_impl_base& impl, int i, int numRunningThreads) override
+    execute(thread_squad_impl_base& impl, int i, int numRunningThreads) noexcept override
     {
         auto laction = action_;
         auto ctx = task_context_factory::template make_task_context<TaskContextT>(impl, i, numRunningThreads);
@@ -101,16 +106,17 @@ public:
     ~thread_squad_transform_reduce_operation() = default;
 
     void
-    execute(thread_squad_impl_base& impl, int i, int numRunningThreads) override
+    execute(thread_squad_impl_base& impl, int i, int numRunningThreads) noexcept override
     {
         auto ltransform = transform_;
         auto ctx = task_context_factory::template make_task_context<TaskContextT>(impl, i, numRunningThreads);
         subthreadData_[i].value = ltransform(ctx);
     }
     void
-    merge(int iDst, int iSrc) override
+    merge(int iDst, int iSrc) noexcept override
     {
-        subthreadData_[iDst].value = reduce_(std::move(subthreadData_[iDst].value), std::move(subthreadData_[iSrc].value));
+        auto lreduce = reduce_;
+        subthreadData_[iDst].value = lreduce(std::move(subthreadData_[iDst].value), std::move(subthreadData_[iSrc].value));
     }
 };
 
@@ -120,9 +126,9 @@ struct task_context_synchronizer
 public:
     ~task_context_synchronizer() = default;  // intentionally non-virtual – the lifetime of the object is not managed through a base class pointer
 
-    virtual void* sync_data();
-    virtual void collect(void const* src);
-    virtual void broadcast(void* dst);
+    virtual void* sync_data() noexcept;
+    virtual void collect(void const* src) noexcept;
+    virtual void broadcast(void* dst) noexcept;
 };
 
 template <typename T, typename R>
@@ -132,32 +138,62 @@ struct alignas(std::hardware_destructive_interference_size) thread_reduce_transf
     R result;
 };
 
-template <typename T, typename ReduceOpT, typename R>
-struct alignas(std::hardware_destructive_interference_size) task_context_reduce_transform_synchronizer : task_context_synchronizer
+template <typename T, typename ReduceOpT>
+struct alignas(std::hardware_destructive_interference_size) task_context_reduce_synchronizer : task_context_synchronizer
 {
-    thread_reduce_transform_data<T, R> data;
-    ReduceOpT reduce;
+    thread_reduce_data<T> data;
+    ReduceOpT& reduce;
 
-    task_context_reduce_transform_synchronizer(T&& _value, ReduceOpT&& _reduce)
+    task_context_reduce_synchronizer(T&& _value, ReduceOpT& _reduce)
         : data{
               .value = std::move(_value)
           },
-          reduce(std::move(_reduce))
+          reduce(_reduce)
     {
     }
 
     void*
-    sync_data() override
+    sync_data() noexcept override
     {
         return &data;
     }
     void
-    collect(void const* src) override
+    collect(void const* src) noexcept override
+    {
+        data.value = reduce(std::move(data.value), std::move(static_cast<thread_reduce_data<T> const*>(src)->value));
+    }
+    void
+    broadcast(void* dst) noexcept override
+    {
+        static_cast<thread_reduce_data<T>*>(dst)->value = data.value;
+    }
+};
+template <typename T, typename ReduceOpT, typename R>
+struct alignas(std::hardware_destructive_interference_size) task_context_reduce_transform_synchronizer : task_context_synchronizer
+{
+    thread_reduce_transform_data<T, R> data;
+    ReduceOpT& reduce;
+
+    task_context_reduce_transform_synchronizer(T&& _value, ReduceOpT& _reduce)
+        : data{
+              .value = std::move(_value)
+          },
+          reduce(_reduce)
+    {
+    }
+
+    void*
+    sync_data() noexcept override
+    {
+        return &data;
+    }
+    void
+    collect(void const* src) noexcept override
     {
         data.value = reduce(std::move(data.value), std::move(static_cast<thread_reduce_transform_data<T, R> const*>(src)->value));
     }
     void
-    broadcast(void* dst) override
+    broadcast(void* dst) noexcept override
     {
         static_cast<thread_reduce_transform_data<T, R>*>(dst)->result = data.result;
     }

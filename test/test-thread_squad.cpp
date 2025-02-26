@@ -1,4 +1,5 @@
 
+#include <patton/thread.hpp>
 #include <patton/thread_squad.hpp>
 
 #include <thread>
@@ -20,10 +21,12 @@
 
 TEST_CASE("thread_squad")
 {
+    int numHardwareThreads = static_cast<int>(std::thread::hardware_concurrency());
+    int numCores = static_cast<int>(patton::physical_concurrency());
+
     GENERATE(range(0, 10)); // repetitions
 
-    //int numThreads = GENERATE(range(0, 10), 10, 48, 50);
-    int numThreads = GENERATE(range(0, 5));
+    int numThreads = GENERATE_COPY(range(0, 5), (numCores + 1)/2, numCores, numHardwareThreads, 3*numHardwareThreads/2, 2*numHardwareThreads);
     CAPTURE(numThreads);
 
     unsigned numActualThreads = static_cast<unsigned>(numThreads);

@@ -85,9 +85,9 @@ public:
         }
 
         void
-        collect(detail::task_context_synchronizer& synchronizer);
+        collect(detail::task_context_synchronizer& synchronizer) noexcept;
         void
-        broadcast(detail::task_context_synchronizer& synchronizer);
+        broadcast(detail::task_context_synchronizer& synchronizer) noexcept;
 
     public:
             //
@@ -108,22 +108,39 @@ public:
             return numRunningThreads_;
         }
 
+            //
+            // Synchronizes all threads which execute the current task.
+            //ᅟ
+            // It is the responsibility of the task to ensure that synchronization operations such as `synchronize()`, `reduce_transform()`,
+            // and `reduce()` are executed by all participating threads unconditionally and in the same order.
+            //
         void
-        sync()
+        synchronize() noexcept
         {
             auto synchronizer = detail::task_context_synchronizer{ };
             collect(synchronizer);
             broadcast(synchronizer);
         }
 
-        template <typename T, typename ReduceOpT, typename TransformFuncT>
+            //
+            // Synchronizes all threads which execute the current task and computes the reduction of `value` for all threads
+            // with the reduction operation `reduceOp`. The result of the reduction is transformed with the `transformFunc` operation,
+            // communicated back to all threads and returned by the `reduce_transform()` call.
+            //ᅟ
+            // The function objects `reduceOp` and `transformFunc` are executed on the calling thread only. `transformFunc` is executed
+            // only on the thread which is the root of the synchronization operation.
+            // It is the responsibility of the task to ensure that synchronization operations such as `synchronize()`, `reduce_transform()`,
+            // and `reduce()` are executed by all participating threads unconditionally and in the same order.
+            // If either of the function objects `transformFunc` or `reduceOp` throws an exception, `std::terminate()` is called.
+            //
+        template <std::semiregular T, detail::reduction<T> ReduceOpT, std::invocable<T> TransformFuncT>
         auto
-        reduce_transform(T value, ReduceOpT reduce, TransformFuncT transform)
+        reduce_transform(T value, ReduceOpT reduceOp, TransformFuncT transformFunc) noexcept
             -> std::decay_t<decltype(transform(value))>
         {
             using R = std::decay_t<decltype(transform(value))>;
 
-            auto synchronizer = detail::task_context_reduce_transform_synchronizer<T, ReduceOpT, R>(std::move(value), std::move(reduce));
+            auto synchronizer = detail::task_context_reduce_transform_synchronizer<T, ReduceOpT, R>(std::move(value), reduceOp);
             collect(synchronizer);
             if (threadIdx_ == 0)
             {
@@ -133,11 +150,24 @@ public:
             return std::move(synchronizer.data).result;
         }
 
-        template <typename T, typename ReduceOpT>
+            //
+            // Synchronizes all threads which execute the current task and computes the reduction of `value` for all threads
+            // with the reduction operation `reduceOp`. The result of the reduction is communicated back to all threads and returned
+            // by the `reduce()` call.
+            //ᅟ
+            // The function object `reduceOp` is executed on the calling thread only.
+            // It is the responsibility of the task to ensure that synchronization operations such as `synchronize()`, `reduce_transform()`,
+            // and `reduce()` are executed by all participating threads unconditionally and in the same order.
+            // If the function object `reduceOp` throws an exception, `std::terminate()` is called.
+            //
+        template <std::semiregular T, detail::reduction<T> ReduceOpT>
         T
-        reduce(T value, ReduceOpT reduce)
+        reduce(T value, ReduceOpT reduceOp) noexcept
         {
-            return reduce_transform(std::move(value), std::move(reduce), std::identity{ });
+            auto synchronizer = detail::task_context_reduce_synchronizer<T, ReduceOpT>(std::move(value), reduceOp);
+            collect(synchronizer);
+            broadcast(synchronizer);
+            return std::move(synchronizer.data).value;
         }
     };
 
@@ -193,6 +223,7 @@ public:
         // task context. If `action()` throws an exception, `std::terminate()` is called.
         //
     template <std::invocable<task_context&> ActionT>
+    requires std::copy_constructible<ActionT>
     void
     run(ActionT action, int concurrency = -1) &
     {
@@ -212,10 +243,11 @@ public:
         //ᅟ
         // `concurrency` must not exceed the number of threads in the thread squad. A value of -1 indicates that all available
         // threads shall be used.
-        // The thread squad makes a dedicated copy of `action` for every participating thread and invokes it with an appropriate
-        // task context. If `action()` throws an exception, `std::terminate()` is called.
+        // The thread squad makes a dedicated copy of `action` for every participating thread and invokes it with a thread-specific
+        // `task_context&` argument. If `action` throws an exception, `std::terminate()` is called.
         //
     template <std::invocable<task_context&> ActionT>
+    requires std::copy_constructible<ActionT>
     void
     run(ActionT action, int concurrency = -1) &&
     {
@@ -232,17 +264,19 @@ public:
     }
 
         //
-        // Runs `transform` on `concurrency` threads and waits until all tasks have run to completion, then reduces
-        // the results using the `reduce` operator.
+        // Runs `transformFunc` on `concurrency` threads and waits until all tasks have run to completion, then reduces
+        // the results using the `reduceOp` operator.
         //ᅟ
         // `concurrency` must not exceed the number of threads in the thread squad. A value of -1 indicates that all available
         // threads shall be used.
-        // The thread squad makes a dedicated copy of `transform` for every participating thread and invokes it with an appropriate
-        // task context. If `transform()` or `reduce()` throws an exception, `std::terminate()` is called.
+        // The thread squad makes a dedicated copy of `transformFunc` and `reduceOp` for every participating thread. `transformFunc`
+        // is invoked with a thread-specific `task_context&` argument. If either of `transformFunc` or `reduceOp` throws an exception,
+        // `std::terminate()` is called.
         //
-    template <std::invocable<task_context&> TransformFuncT, typename T, typename ReduceOpT>
-    T
-    transform_reduce(TransformFuncT transform, T init, ReduceOpT reduce, int concurrency = -1) &
+    template <std::invocable<task_context&> TransformFuncT, std::semiregular T, detail::reduction<T> ReduceOpT>
+    requires std::copy_constructible<TransformFuncT> && std::copy_constructible<ReduceOpT>
+    [[nodiscard]] T
+    transform_reduce(TransformFuncT transformFunc, T init, ReduceOpT reduceOp, int concurrency = -1) &
     {
         gsl_Expects(concurrency >= -1 && concurrency <= handle_->numThreads);
 
@@ -253,7 +287,7 @@ public:
 
         auto data = std::make_unique<detail::thread_reduce_data<T>[]>(1 + concurrency);
         data[0].value = std::move(init);
-        auto op = detail::thread_squad_transform_reduce_operation<task_context, TransformFuncT, T, ReduceOpT>(std::move(transform), std::move(reduce), data.get() + 1);
+        auto op = detail::thread_squad_transform_reduce_operation<task_context, TransformFuncT, T, ReduceOpT>(std::move(transformFunc), std::move(reduceOp), data.get() + 1);
         op.params.concurrency = concurrency;
         do_run(op);
         auto result = std::move(data[0].value);
@@ -261,17 +295,19 @@ public:
     }
 
         //
-        // Runs `transform` on `concurrency` threads and waits until all tasks have run to completion, then reduces
-        // the results using the `reduce` operator.
+        // Runs `transformFunc` on `concurrency` threads and waits until all tasks have run to completion, then reduces
+        // the results using the `reduceOp` operator.
         //ᅟ
         // `concurrency` must not exceed the number of threads in the thread squad. A value of -1 indicates that all available
         // threads shall be used.
-        // The thread squad makes a dedicated copy of `transform` for every participating thread and invokes it with an appropriate
-        // task context. If `transform()` or `reduce()` throws an exception, `std::terminate()` is called.
+        // The thread squad makes a dedicated copy of `transformFunc` and `reduceOp` for every participating thread. `transformFunc`
+        // is invoked with a thread-specific `task_context&` argument. If either of `transformFunc` or `reduceOp` throws an exception,
+        // `std::terminate()` is called.
         //
-    template <std::invocable<task_context&> TransformFuncT, typename T, typename ReduceOpT>
-    T
-    transform_reduce(TransformFuncT transform, T init, ReduceOpT reduce, int concurrency = -1) &&
+    template <std::invocable<task_context&> TransformFuncT, std::semiregular T, detail::reduction<T> ReduceOpT>
+    requires std::copy_constructible<TransformFuncT> && std::copy_constructible<ReduceOpT>
+    [[nodiscard]] T
+    transform_reduce(TransformFuncT transformFunc, T init, ReduceOpT reduceOp, int concurrency = -1) &&
     {
         gsl_Expects(concurrency >= -1 && concurrency <= handle_->numThreads);
 
@@ -282,7 +318,7 @@ public:
 
         auto data = std::make_unique<detail::thread_reduce_data<T>[]>(1 + concurrency);
         data[0].value = std::move(init);
-        auto op = detail::thread_squad_transform_reduce_operation<task_context, TransformFuncT, T, ReduceOpT>(std::move(transform), std::move(reduce), data.get() + 1);
+        auto op = detail::thread_squad_transform_reduce_operation<task_context, TransformFuncT, T, ReduceOpT>(std::move(transformFunc), std::move(reduceOp), data.get() + 1);
         op.params.concurrency = concurrency;
         op.params.join_requested = true;
         do_run(op);

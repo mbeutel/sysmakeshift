@@ -9,16 +9,16 @@
 
 #include <new>
 #include <string>
-#include <memory>              // for unique_ptr<>
+#include <memory>        // for unique_ptr<>
 #include <atomic>
 #include <thread>
-#include <cstddef>             // for size_t, ptrdiff_t
-#include <cstring>             // for wcslen(), swprintf()
-#include <utility>             // for move()
-#include <algorithm>           // for min(), max()
-#include <exception>           // for terminate()
-#include <stdexcept>           // for range_error
-#include <type_traits>         // for remove_pointer<>
+#include <cstddef>       // for size_t, ptrdiff_t
+#include <cstring>       // for wcslen(), swprintf()
+#include <utility>       // for move()
+#include <algorithm>     // for min(), max()
+#include <exception>     // for terminate()
+#include <stdexcept>     // for range_error
+#include <type_traits>   // for remove_pointer<>
 #include <system_error>
 
 #if defined(_WIN32)
@@ -291,13 +291,13 @@ struct PThreadAttr
 
 #if defined(__i386__) || defined(__x86_64__) || defined(_M_IX86) || defined(_M_X64)
 static inline void
-pause()
+pause() noexcept
 {
     _mm_pause();
 }
 #else
 static inline void
-pause()
+pause() noexcept
 {
     [[maybe_unused]] volatile int v = 0;
 }
@@ -310,7 +310,7 @@ constexpr int yieldCountExp = 0;  // 6
 
 template <typename T>
 bool
-wait_equal_exponential_backoff(std::atomic<T> const& a, T oldValue)
+wait_equal_exponential_backoff(std::atomic<T> const& a, T oldValue) noexcept
 {
     int lspinCount = spinCount;
     if (a.load(std::memory_order_relaxed) != oldValue) return true;
@@ -351,7 +351,7 @@ template <typename T>
 T
 wait_and_load(
     std::atomic<T>& a, T oldValue,
-    wait_mode waitMode = wait_mode::spin_wait)
+    wait_mode waitMode = wait_mode::spin_wait) noexcept
 {
     if (waitMode != wait_mode::spin_wait || !detail::wait_equal_exponential_backoff(a, oldValue))
     {
@@ -363,7 +363,7 @@ wait_and_load(
 template <typename T>
 T
 toggle_and_notify(
-    std::atomic<T>& a)
+    std::atomic<T>& a) noexcept
 {
     std::atomic_thread_fence(std::memory_order_release);
 
@@ -612,13 +612,13 @@ private:
     }
 
     static int
-    next_substride(int stride)
+    next_substride(int stride) noexcept
     {
         return (stride + (treeBreadth - 1)) / treeBreadth;
     }
 
     void
-    init(int first, int last, int stride)
+    init(int first, int last, int stride) noexcept
     {
         if (stride != 1)
         {
@@ -632,7 +632,7 @@ private:
     }
 
     void
-    notify_subthreads_impl(int first, int last, int stride)
+    notify_subthreads_impl(int first, int last, int stride) noexcept
     {
         while (stride != 1)
         {
@@ -647,7 +647,7 @@ private:
     }
 
     void
-    wait_for_subthreads_impl(int first, int last, int stride)
+    wait_for_subthreads_impl(int first, int last, int stride) noexcept
     {
         int substride = next_substride(stride);
         if (stride != 1)
@@ -661,7 +661,7 @@ private:
     }
 
     void
-    broadcast_to_thread(task_context_synchronizer& synchronizer, [[maybe_unused]] int callingThreadIdx, int targetThreadIdx)
+    broadcast_to_thread(task_context_synchronizer& synchronizer, [[maybe_unused]] int callingThreadIdx, int targetThreadIdx) noexcept
     {
         THREAD_SQUAD_DBG("patton thread squad, thread %d: synchronization: notifying %d with downward sense %d\n", callingThreadIdx, targetThreadIdx, (1 ^ threadData_[targetThreadIdx].downward_.load(std::memory_order_relaxed)));
         synchronizer.broadcast(threadData_[targetThreadIdx].syncData_);
@@ -669,7 +669,7 @@ private:
     }
 
     void
-    collect_from_thread(task_context_synchronizer& synchronizer, [[maybe_unused]] int callingThreadIdx, int targetThreadIdx)
+    collect_from_thread(task_context_synchronizer& synchronizer, [[maybe_unused]] int callingThreadIdx, int targetThreadIdx) noexcept
     {
         int prevSense = threadData_[targetThreadIdx].downward_.load(std::memory_order_relaxed);
         THREAD_SQUAD_DBG("patton thread squad, thread %d: synchronization: awaiting %d for upward sense %d\n", callingThreadIdx, targetThreadIdx, (1 ^ prevSense));
@@ -679,7 +679,7 @@ private:
     }
 
     void
-    broadcast_to_subthreads_impl(task_context_synchronizer& synchronizer, int first, int last, int stride)
+    broadcast_to_subthreads_impl(task_context_synchronizer& synchronizer, int first, int last, int stride) noexcept
     {
         while (stride != 1)
         {
@@ -694,7 +694,7 @@ private:
     }
 
     void
-    collect_from_subthreads_impl(task_context_synchronizer& synchronizer, int first, int last, int stride)
+    collect_from_subthreads_impl(task_context_synchronizer& synchronizer, int first, int last, int stride) noexcept
     {
         int substride = next_substride(stride);
         if (stride != 1)
@@ -766,14 +766,14 @@ public:
     }
 
     void
-    notify_thread([[maybe_unused]] int callingThreadIdx, int targetThreadIdx)
+    notify_thread([[maybe_unused]] int callingThreadIdx, int targetThreadIdx) noexcept
     {
         THREAD_SQUAD_DBG("patton thread squad, thread %d: notifying %d with incoming sense %d\n", callingThreadIdx, targetThreadIdx, (1 ^ threadData_[targetThreadIdx].incoming_.load(std::memory_order_relaxed)));
         detail::toggle_and_notify(threadData_[targetThreadIdx].incoming_);
     }
 
     void
-    wait_for_thread([[maybe_unused]] int callingThreadIdx, int targetThreadIdx, wait_mode waitMode = wait_mode::spin_wait)
+    wait_for_thread([[maybe_unused]] int callingThreadIdx, int targetThreadIdx, wait_mode waitMode = wait_mode::spin_wait) noexcept
     {
         int currentSense = threadData_[targetThreadIdx].incoming_.load(std::memory_order_relaxed);
         int prevSense = 1 ^ currentSense;
@@ -784,21 +784,21 @@ public:
     }
 
     void
-    notify_subthreads(int callingThreadIdx, int _concurrency)
+    notify_subthreads(int callingThreadIdx, int _concurrency) noexcept
     {
         int stride = threadData_[callingThreadIdx].numSubthreads_;
         notify_subthreads_impl(callingThreadIdx, std::min(callingThreadIdx + stride, _concurrency), stride);
     }
 
     void
-    wait_for_subthreads(int callingThreadIdx, int _concurrency)
+    wait_for_subthreads(int callingThreadIdx, int _concurrency) noexcept
     {
         int stride = threadData_[callingThreadIdx].numSubthreads_;
         wait_for_subthreads_impl(callingThreadIdx, std::min(callingThreadIdx + stride, _concurrency), stride);
     }
 
     void
-    synchronize_collect(task_context_synchronizer& synchronizer, int callingThreadIdx)
+    synchronize_collect(task_context_synchronizer& synchronizer, int callingThreadIdx) noexcept
     {
             // First synchronize with subordinate threads.
         int stride = threadData_[callingThreadIdx].numSubthreads_;
@@ -815,7 +815,7 @@ public:
         }
     }
     void
-    synchronize_broadcast(task_context_synchronizer& synchronizer, int callingThreadIdx)
+    synchronize_broadcast(task_context_synchronizer& synchronizer, int callingThreadIdx) noexcept
     {
             // Broadcast the result to subordinate threads.
         int stride = threadData_[callingThreadIdx].numSubthreads_;
@@ -976,21 +976,21 @@ thread_squad_thread_func(void* ctx)
 
 
 void
-thread_squad_task::merge([[maybe_unused]] int iDst, [[maybe_unused]] int iSrc)
+thread_squad_task::merge([[maybe_unused]] int iDst, [[maybe_unused]] int iSrc) noexcept
 {
 }
 
 void*
-task_context_synchronizer::sync_data()
+task_context_synchronizer::sync_data() noexcept
 {
     return nullptr;
 }
 void
-task_context_synchronizer::collect([[maybe_unused]] void const* src)
+task_context_synchronizer::collect([[maybe_unused]] void const* src) noexcept
 {
 }
 void
-task_context_synchronizer::broadcast([[maybe_unused]] void* dst)
+task_context_synchronizer::broadcast([[maybe_unused]] void* dst) noexcept
 {
 }
 
@@ -1001,7 +1001,7 @@ public:
     ~thread_squad_nop() = default;
 
     void
-    execute([[maybe_unused]] thread_squad_impl_base& impl, [[maybe_unused]] int i, [[maybe_unused]] int numRunningThreads) override
+    execute([[maybe_unused]] thread_squad_impl_base& impl, [[maybe_unused]] int i, [[maybe_unused]] int numRunningThreads) noexcept override
     {
     }
 };
@@ -1025,13 +1025,13 @@ namespace patton {
 
 
 void
-thread_squad::task_context::collect(detail::task_context_synchronizer& synchronizer)
+thread_squad::task_context::collect(detail::task_context_synchronizer& synchronizer) noexcept
 {
     auto& impl = static_cast<detail::thread_squad_impl&>(impl_);
     impl.synchronize_collect(synchronizer, threadIdx_);
 }
 void
-thread_squad::task_context::broadcast(detail::task_context_synchronizer& synchronizer)
+thread_squad::task_context::broadcast(detail::task_context_synchronizer& synchronizer) noexcept
 {
     auto& impl = static_cast<detail::thread_squad_impl&>(impl_);
     impl.synchronize_broadcast(synchronizer, threadIdx_);
