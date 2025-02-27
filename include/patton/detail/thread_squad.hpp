@@ -104,6 +104,12 @@ public:
     {
     }
     ~thread_squad_transform_reduce_operation() = default;
+    
+    ReduceOpT&
+    reduce_op()
+    {
+        return reduce_;
+    }
 
     void
     execute(thread_squad_impl_base& impl, int i, int numRunningThreads) noexcept override

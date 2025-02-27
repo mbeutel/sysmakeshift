@@ -273,11 +273,13 @@ public:
         // is invoked with a thread-specific `task_context&` argument. If either of `transformFunc` or `reduceOp` throws an exception,
         // `std::terminate()` is called.
         //
-    template <std::invocable<task_context&> TransformFuncT, std::semiregular T, detail::reduction<T> ReduceOpT>
-    requires std::copy_constructible<TransformFuncT> && std::copy_constructible<ReduceOpT>
-    [[nodiscard]] T
-    transform_reduce(TransformFuncT transformFunc, T init, ReduceOpT reduceOp, int concurrency = -1) &
+    template <std::invocable<task_context&> TransformFuncT, detail::reduction<std::invoke_result_t<TransformFuncT, task_context&>> ReduceOpT>
+    requires std::copy_constructible<TransformFuncT> && std::copy_constructible<ReduceOpT> && std::semiregular<std::invoke_result_t<TransformFuncT, task_context&>>
+    [[nodiscard]] std::invoke_result_t<TransformFuncT, task_context&>
+    transform_reduce(TransformFuncT transformFunc, std::invoke_result_t<TransformFuncT, task_context&> init, ReduceOpT reduceOp, int concurrency = -1) &&
     {
+        using T = std::invoke_result_t<TransformFuncT, task_context&>;
+
         gsl_Expects(concurrency >= -1 && concurrency <= handle_->numThreads);
 
         if (concurrency == -1)
@@ -285,13 +287,19 @@ public:
             concurrency = handle_->numThreads;
         }
 
-        auto data = std::make_unique<detail::thread_reduce_data<T>[]>(1 + concurrency);
-        data[0].value = std::move(init);
-        auto op = detail::thread_squad_transform_reduce_operation<task_context, TransformFuncT, T, ReduceOpT>(std::move(transformFunc), std::move(reduceOp), data.get() + 1);
-        op.params.concurrency = concurrency;
-        do_run(op);
-        auto result = std::move(data[0].value);
-        return result;
+        if (concurrency != 0)
+        {
+            auto data = std::make_unique<detail::thread_reduce_data<T>[]>(concurrency);
+            auto op = detail::thread_squad_transform_reduce_operation<task_context, TransformFuncT, T, ReduceOpT>(std::move(transformFunc), std::move(reduceOp), data.get());
+            op.params.concurrency = concurrency;
+            op.params.join_requested = true;
+            do_run(op);
+            return op.reduce_op()(std::move(init), std::move(data[0].value));
+        }
+        else
+        {
+            return std::move(init);
+        }
     }
 
         //
@@ -304,11 +312,13 @@ public:
         // is invoked with a thread-specific `task_context&` argument. If either of `transformFunc` or `reduceOp` throws an exception,
         // `std::terminate()` is called.
         //
-    template <std::invocable<task_context&> TransformFuncT, std::semiregular T, detail::reduction<T> ReduceOpT>
-    requires std::copy_constructible<TransformFuncT> && std::copy_constructible<ReduceOpT>
-    [[nodiscard]] T
-    transform_reduce(TransformFuncT transformFunc, T init, ReduceOpT reduceOp, int concurrency = -1) &&
+    template <std::invocable<task_context&> TransformFuncT, detail::reduction<std::invoke_result_t<TransformFuncT, task_context&>> ReduceOpT>
+    requires std::copy_constructible<TransformFuncT> && std::copy_constructible<ReduceOpT> && std::semiregular<std::invoke_result_t<TransformFuncT, task_context&>>
+    [[nodiscard]] std::invoke_result_t<TransformFuncT, task_context&>
+    transform_reduce(TransformFuncT transformFunc, std::invoke_result_t<TransformFuncT, task_context&> init, ReduceOpT reduceOp, int concurrency = -1) &
     {
+        using T = std::invoke_result_t<TransformFuncT, task_context&>;
+
         gsl_Expects(concurrency >= -1 && concurrency <= handle_->numThreads);
 
         if (concurrency == -1)
@@ -316,14 +326,18 @@ public:
             concurrency = handle_->numThreads;
         }
 
-        auto data = std::make_unique<detail::thread_reduce_data<T>[]>(1 + concurrency);
-        data[0].value = std::move(init);
-        auto op = detail::thread_squad_transform_reduce_operation<task_context, TransformFuncT, T, ReduceOpT>(std::move(transformFunc), std::move(reduceOp), data.get() + 1);
-        op.params.concurrency = concurrency;
-        op.params.join_requested = true;
-        do_run(op);
-        auto result = std::move(data[0].value);
-        return result;
+        if (concurrency != 0)
+        {
+            auto data = std::make_unique<detail::thread_reduce_data<T>[]>(concurrency);
+            auto op = detail::thread_squad_transform_reduce_operation<task_context, TransformFuncT, T, ReduceOpT>(std::move(transformFunc), std::move(reduceOp), data.get());
+            op.params.concurrency = concurrency;
+            do_run(op);
+            return op.reduce_op()(std::move(init), std::move(data[0].value));
+        }
+        else
+        {
+            return std::move(init);
+        }
     }
 };
 

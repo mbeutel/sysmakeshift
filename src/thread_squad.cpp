@@ -547,6 +547,13 @@ public:
             threadSquad_.wait_for_subthreads(threadIdx_, numThreadsToWaitFor);
         }
 
+        void
+        join_subthreads() noexcept
+        {
+            int numThreadsToWaitFor = threadSquad_.num_threads_for_task();
+            threadSquad_.join_subthreads(threadIdx_, numThreadsToWaitFor);
+        }
+
         thread_squad_task&
         task_wait() noexcept
         {
@@ -631,33 +638,44 @@ private:
         threadData_[first].numSubthreads_ = stride;
     }
 
+    template <typename F>
     void
-    notify_subthreads_impl(int first, int last, int stride) noexcept
+    to_subthreads(int callingThreadIdx, int _concurrency, F func) noexcept
     {
+        int stride = threadData_[callingThreadIdx].numSubthreads_;
+        int last = std::min(callingThreadIdx + stride, _concurrency);
         while (stride != 1)
         {
             int substride = next_substride(stride);
-            for (int i = first + substride; i < last; i += substride)
+            for (int i = callingThreadIdx + substride; i < last; i += substride)
             {
-                notify_thread(first, i);
+                func(callingThreadIdx, i);
             }
-            last = std::min(first + substride, last);
+            last = std::min(callingThreadIdx + substride, last);
             stride = substride;
         }
     }
 
+    template <typename F>
     void
-    wait_for_subthreads_impl(int first, int last, int stride) noexcept
+    from_subthreads_impl(int first, int last, int stride, F const& func) noexcept
     {
         int substride = next_substride(stride);
         if (stride != 1)
         {
-            wait_for_subthreads_impl(first, std::min(first + substride, last), substride);
+            from_subthreads_impl(first, std::min(first + substride, last), substride, func);
         }
         for (int i = first + substride; i < last; i += substride)
         {
-            wait_for_thread(first, i, waitMode_);
+            func(first, i);
         }
+    }
+    template <typename F>
+    void
+    from_subthreads(int callingThreadIdx, int _concurrency, F func) noexcept
+    {
+        int stride = threadData_[callingThreadIdx].numSubthreads_;
+        from_subthreads_impl(callingThreadIdx, std::min(callingThreadIdx + stride, _concurrency), stride, func);
     }
 
     void
@@ -676,35 +694,6 @@ private:
         detail::wait_and_load(threadData_[targetThreadIdx].upward_, prevSense, waitMode_);
         THREAD_SQUAD_DBG("patton thread squad, thread %d: synchronization: awaited %d\n", callingThreadIdx, targetThreadIdx);
         synchronizer.collect(threadData_[targetThreadIdx].syncData_);
-    }
-
-    void
-    broadcast_to_subthreads_impl(task_context_synchronizer& synchronizer, int first, int last, int stride) noexcept
-    {
-        while (stride != 1)
-        {
-            int substride = next_substride(stride);
-            for (int i = first + substride; i < last; i += substride)
-            {
-                broadcast_to_thread(synchronizer, first, i);
-            }
-            last = std::min(first + substride, last);
-            stride = substride;
-        }
-    }
-
-    void
-    collect_from_subthreads_impl(task_context_synchronizer& synchronizer, int first, int last, int stride) noexcept
-    {
-        int substride = next_substride(stride);
-        if (stride != 1)
-        {
-            collect_from_subthreads_impl(synchronizer, first, std::min(first + substride, last), substride);
-        }
-        for (int i = first + substride; i < last; i += substride)
-        {
-            collect_from_thread(synchronizer, first, i);
-        }
     }
 
 public:
@@ -755,15 +744,15 @@ public:
         }
     }
 
-    void
-    join_all_threads()
-    {
-        for (int i = 0; i < numThreads; ++i)
-        {
-            THREAD_SQUAD_DBG("patton thread squad, thread -1: joining %d\n", i);
-            threadData_[i].osThread_.join();
-        }
-    }
+    //void
+    //join_all_threads()
+    //{
+    //    for (int i = 0; i < numThreads; ++i)
+    //    {
+    //        THREAD_SQUAD_DBG("patton thread squad, thread -1: joining %d\n", i);
+    //        threadData_[i].osThread_.join();
+    //    }
+    //}
 
     void
     notify_thread([[maybe_unused]] int callingThreadIdx, int targetThreadIdx) noexcept
@@ -780,29 +769,68 @@ public:
         THREAD_SQUAD_DBG("patton thread squad, thread %d: awaiting %d for outgoing sense %d\n", callingThreadIdx, targetThreadIdx, currentSense);
         detail::wait_and_load(threadData_[targetThreadIdx].outgoing_, prevSense, waitMode);
         THREAD_SQUAD_DBG("patton thread squad, thread %d: awaited %d\n", callingThreadIdx, targetThreadIdx);
-        task_->merge(callingThreadIdx, targetThreadIdx);
+
+            // Merge results unless we are on the main thread.
+        if (callingThreadIdx >= 0)
+        {
+            task_->merge(callingThreadIdx, targetThreadIdx);
+        }
+    }
+
+    void
+    join_thread([[maybe_unused]] int callingThreadIdx, int targetThreadIdx) noexcept
+    {
+        THREAD_SQUAD_DBG("patton thread squad, thread %d: joining %d\n", callingThreadIdx, targetThreadIdx);
+        threadData_[targetThreadIdx].osThread_.join();
     }
 
     void
     notify_subthreads(int callingThreadIdx, int _concurrency) noexcept
     {
-        int stride = threadData_[callingThreadIdx].numSubthreads_;
-        notify_subthreads_impl(callingThreadIdx, std::min(callingThreadIdx + stride, _concurrency), stride);
+        to_subthreads(
+            callingThreadIdx, _concurrency,
+            [this]
+            (int callingThreadIdx, int targetThreadIdx)
+            {
+                notify_thread(callingThreadIdx, targetThreadIdx);
+            });
     }
 
     void
     wait_for_subthreads(int callingThreadIdx, int _concurrency) noexcept
     {
-        int stride = threadData_[callingThreadIdx].numSubthreads_;
-        wait_for_subthreads_impl(callingThreadIdx, std::min(callingThreadIdx + stride, _concurrency), stride);
+        from_subthreads(
+            callingThreadIdx, _concurrency,
+            [this]
+            (int callingThreadIdx, int targetThreadIdx)
+            {
+                wait_for_thread(callingThreadIdx, targetThreadIdx, waitMode_);
+            });
+    }
+
+    void
+    join_subthreads(int callingThreadIdx, int _concurrency) noexcept
+    {
+        from_subthreads(
+            callingThreadIdx, _concurrency,
+            [this]
+            (int callingThreadIdx, int targetThreadIdx)
+            {
+                join_thread(callingThreadIdx, targetThreadIdx);
+            });
     }
 
     void
     synchronize_collect(task_context_synchronizer& synchronizer, int callingThreadIdx) noexcept
     {
             // First synchronize with subordinate threads.
-        int stride = threadData_[callingThreadIdx].numSubthreads_;
-        collect_from_subthreads_impl(synchronizer, callingThreadIdx, std::min(callingThreadIdx + stride, task_->params.concurrency), stride);
+        from_subthreads(
+            callingThreadIdx, task_->params.concurrency,
+            [this, &synchronizer]
+            (int callingThreadIdx, int targetThreadIdx)
+            {
+                collect_from_thread(synchronizer, callingThreadIdx, targetThreadIdx);
+            });
 
             // If there is a superordinate thread, signal availability and wait.
             // Make the synchronizer data available for the duration of the synchronization.
@@ -818,8 +846,13 @@ public:
     synchronize_broadcast(task_context_synchronizer& synchronizer, int callingThreadIdx) noexcept
     {
             // Broadcast the result to subordinate threads.
-        int stride = threadData_[callingThreadIdx].numSubthreads_;
-        broadcast_to_subthreads_impl(synchronizer, callingThreadIdx, std::min(callingThreadIdx + stride, task_->params.concurrency), stride);
+        to_subthreads(
+            callingThreadIdx, task_->params.concurrency,
+            [this, &synchronizer]
+            (int callingThreadIdx, int targetThreadIdx)
+            {
+                broadcast_to_thread(synchronizer, callingThreadIdx, targetThreadIdx);
+            });
     }
 
     void
@@ -867,7 +900,11 @@ run_thread(thread_squad_impl::thread_data& threadData)
             ++pass;
         }
 
-        if (joinRequested) break;
+        if (joinRequested)
+        {
+            threadData.join_subthreads();
+            break;
+        }
     }
     THREAD_SQUAD_DBG("patton thread squad, thread %d: exiting after %d passes\n", threadData.thread_idx(), pass);
 }
@@ -913,13 +950,11 @@ noexcept  // We cannot really handle exceptions here.
         {
             self.fork_all_threads();
         }
-        if (!task.params.join_requested)
+        self.wait_for_thread(-1, 0, wait_mode::wait); // no spin wait in main thread
+        if (task.params.join_requested)
         {
-            self.wait_for_thread(-1, 0, wait_mode::wait); // no spin wait in main thread
-        }
-        else
-        {
-            self.join_all_threads();
+            //self.join_all_threads();
+            self.join_thread(-1, 0);
         }
         self.release_task();
     }
