@@ -162,7 +162,7 @@ TEST_CASE("thread_squad")
         for (int i = 1; i <= int(numActualThreads); ++i)
         {
             CAPTURE(i);
-            bool reducedSumIsCorrectForEveryThread = threadSquad.transform_reduce(
+            bool reducedSumIsCorrectForEveryThread = threadSquad.transform_reduce_first(
                 [numToSum, sumOfNum]
                 (patton::thread_squad::task_context& ctx)
                 {
@@ -180,7 +180,6 @@ TEST_CASE("thread_squad")
 
                     return sum == sumOfNum;
                 },
-                true,
                 std::logical_and<>{ },
                 i);
             CHECK(reducedSumIsCorrectForEveryThread);
