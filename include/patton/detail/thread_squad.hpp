@@ -5,6 +5,7 @@
 
 #include <new>
 #include <memory>       // for unique_ptr<>
+#include <optional>
 #include <concepts>
 #include <type_traits>  // for invoke_result<>
 
@@ -87,7 +88,7 @@ public:
 template <typename T>
 struct alignas(std::hardware_destructive_interference_size) thread_reduce_data
 {
-    T value;
+    std::optional<T> value;
 };
 
 template <typename TaskContextT, typename TransformFuncT, typename T, typename ReduceOpT>
@@ -116,13 +117,15 @@ public:
     {
         auto ltransform = transform_;
         auto ctx = task_context_factory::template make_task_context<TaskContextT>(impl, i, numRunningThreads);
+        gsl_Assert(!subthreadData_[i].value.has_value());
         subthreadData_[i].value = ltransform(ctx);
     }
     void
     merge(int iDst, int iSrc) noexcept override
     {
         auto lreduce = reduce_;
-        subthreadData_[iDst].value = lreduce(std::move(subthreadData_[iDst].value), std::move(subthreadData_[iSrc].value));
+        subthreadData_[iDst].value = lreduce(std::move(subthreadData_[iDst].value.value()), std::move(subthreadData_[iSrc].value.value()));
+        subthreadData_[iSrc].value.reset();
     }
 };
 
@@ -137,8 +140,14 @@ public:
     virtual void broadcast(void* dst) noexcept;
 };
 
+template <typename T>
+struct alignas(std::hardware_destructive_interference_size) thread_sync_reduce_data
+{
+    T value;
+};
+
 template <typename T, typename R>
-struct alignas(std::hardware_destructive_interference_size) thread_reduce_transform_data
+struct alignas(std::hardware_destructive_interference_size) thread_sync_reduce_transform_data
 {
     T value;
     R result;
@@ -147,7 +156,7 @@ struct alignas(std::hardware_destructive_interference_size) thread_reduce_transf
 template <typename T, typename ReduceOpT>
 struct alignas(std::hardware_destructive_interference_size) task_context_reduce_synchronizer : task_context_synchronizer
 {
-    thread_reduce_data<T> data;
+    thread_sync_reduce_data<T> data;
     ReduceOpT& reduce;
 
     task_context_reduce_synchronizer(T&& _value, ReduceOpT& _reduce)
@@ -166,18 +175,18 @@ struct alignas(std::hardware_destructive_interference_size) task_context_reduce_
     void
     collect(void const* src) noexcept override
     {
-        data.value = reduce(std::move(data.value), std::move(static_cast<thread_reduce_data<T> const*>(src)->value));
+        data.value = reduce(std::move(data.value), std::move(static_cast<thread_sync_reduce_data<T> const*>(src)->value));
     }
     void
     broadcast(void* dst) noexcept override
     {
-        static_cast<thread_reduce_data<T>*>(dst)->value = data.value;
+        static_cast<thread_sync_reduce_data<T>*>(dst)->value = data.value;
     }
 };
 template <typename T, typename ReduceOpT, typename R>
 struct alignas(std::hardware_destructive_interference_size) task_context_reduce_transform_synchronizer : task_context_synchronizer
 {
-    thread_reduce_transform_data<T, R> data;
+    thread_sync_reduce_transform_data<T, R> data;
     ReduceOpT& reduce;
 
     task_context_reduce_transform_synchronizer(T&& _value, ReduceOpT& _reduce)
@@ -196,12 +205,12 @@ struct alignas(std::hardware_destructive_interference_size) task_context_reduce_
     void
     collect(void const* src) noexcept override
     {
-        data.value = reduce(std::move(data.value), std::move(static_cast<thread_reduce_transform_data<T, R> const*>(src)->value));
+        data.value = reduce(std::move(data.value), std::move(static_cast<thread_sync_reduce_transform_data<T, R> const*>(src)->value));
     }
     void
     broadcast(void* dst) noexcept override
     {
-        static_cast<thread_reduce_transform_data<T, R>*>(dst)->result = data.result;
+        static_cast<thread_sync_reduce_transform_data<T, R>*>(dst)->result = data.result;
     }
 };
 #ifdef _MSC_VER

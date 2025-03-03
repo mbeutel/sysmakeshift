@@ -18,6 +18,16 @@
 #endif // defined(_WIN32) || defined(__linux__)
 
 
+template <typename T>
+struct non_default_initializable
+{
+    T value;
+
+    non_default_initializable(T _value)
+        : value(std::move(_value))
+    {
+    }
+};
 
 TEST_CASE("thread_squad")
 {
@@ -144,11 +154,14 @@ TEST_CASE("thread_squad")
                         volatile int local = i;  // prevent the compiler (Clang, in particular) from optimizing this further
                         partialSum += local;
                     }
-                    return partialSum;
+                    return non_default_initializable(partialSum);
                 },
-                0,
-                std::plus<>{ },
-                i);
+                non_default_initializable(0),
+                [](non_default_initializable<int> lhs, non_default_initializable<int> rhs)
+                {
+                    return non_default_initializable(lhs.value + rhs.value);
+                },
+                i).value;
             CHECK(sum == sumOfNum);
         }
     }
@@ -176,12 +189,20 @@ TEST_CASE("thread_squad")
                         partialSum += local;
                     }
 
-                    int sum = ctx.reduce(partialSum, std::plus<>{ });
+                    int sum = ctx.reduce(
+                        non_default_initializable(partialSum),
+                        [](non_default_initializable<int> lhs, non_default_initializable<int> rhs)
+                        {
+                            return non_default_initializable(lhs.value + rhs.value);
+                        }).value;
 
-                    return sum == sumOfNum;
+                    return non_default_initializable(sum == sumOfNum);
                 },
-                std::logical_and<>{ },
-                i);
+                [](non_default_initializable<bool> lhs, non_default_initializable<bool> rhs)
+                {
+                    return non_default_initializable(lhs.value && rhs.value);
+                },
+                i).value;
             CHECK(reducedSumIsCorrectForEveryThread);
         }
     }

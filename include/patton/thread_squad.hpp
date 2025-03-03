@@ -133,7 +133,7 @@ public:
             // and `reduce()` are executed by all participating threads unconditionally and in the same order.
             // If either of the function objects `transformFunc` or `reduceOp` throws an exception, `std::terminate()` is called.
             //
-        template <std::semiregular T, detail::reduction<T> ReduceOpT, std::invocable<T> TransformFuncT>
+        template <std::copyable T, detail::reduction<T> ReduceOpT, std::invocable<T> TransformFuncT>
         auto
         reduce_transform(T value, ReduceOpT reduceOp, TransformFuncT transformFunc) noexcept
             -> std::decay_t<decltype(transform(value))>
@@ -160,7 +160,7 @@ public:
             // and `reduce()` are executed by all participating threads unconditionally and in the same order.
             // If the function object `reduceOp` throws an exception, `std::terminate()` is called.
             //
-        template <std::semiregular T, detail::reduction<T> ReduceOpT>
+        template <std::copyable T, detail::reduction<T> ReduceOpT>
         T
         reduce(T value, ReduceOpT reduceOp) noexcept
         {
@@ -274,7 +274,7 @@ public:
         // `std::terminate()` is called.
         //
     template <std::invocable<task_context&> TransformFuncT, detail::reduction<std::invoke_result_t<TransformFuncT, task_context&>> ReduceOpT>
-    requires std::copy_constructible<TransformFuncT> && std::copy_constructible<ReduceOpT> && std::semiregular<std::invoke_result_t<TransformFuncT, task_context&>>
+    requires std::copy_constructible<TransformFuncT> && std::copy_constructible<ReduceOpT> && std::copyable<std::invoke_result_t<TransformFuncT, task_context&>>
     [[nodiscard]] std::invoke_result_t<TransformFuncT, task_context&>
     transform_reduce(TransformFuncT transformFunc, std::invoke_result_t<TransformFuncT, task_context&> init, ReduceOpT reduceOp, int concurrency = -1) &&
     {
@@ -294,7 +294,7 @@ public:
             op.params.concurrency = concurrency;
             op.params.join_requested = true;
             do_run(op);
-            return op.reduce_op()(std::move(init), std::move(data[0].value));
+            return op.reduce_op()(std::move(init), std::move(data[0].value).value());
         }
         else
         {
@@ -313,7 +313,7 @@ public:
         // `std::terminate()` is called.
         //
     template <std::invocable<task_context&> TransformFuncT, detail::reduction<std::invoke_result_t<TransformFuncT, task_context&>> ReduceOpT>
-    requires std::copy_constructible<TransformFuncT> && std::copy_constructible<ReduceOpT> && std::semiregular<std::invoke_result_t<TransformFuncT, task_context&>>
+    requires std::copy_constructible<TransformFuncT> && std::copy_constructible<ReduceOpT> && std::copyable<std::invoke_result_t<TransformFuncT, task_context&>>
     [[nodiscard]] std::invoke_result_t<TransformFuncT, task_context&>
     transform_reduce(TransformFuncT transformFunc, std::invoke_result_t<TransformFuncT, task_context&> init, ReduceOpT reduceOp, int concurrency = -1) &
     {
@@ -332,7 +332,7 @@ public:
             auto op = detail::thread_squad_transform_reduce_operation<task_context, TransformFuncT, T, ReduceOpT>(std::move(transformFunc), std::move(reduceOp), data.get());
             op.params.concurrency = concurrency;
             do_run(op);
-            return op.reduce_op()(std::move(init), std::move(data[0].value));
+            return op.reduce_op()(std::move(init), std::move(data[0].value).value());
         }
         else
         {
@@ -351,7 +351,7 @@ public:
         // `std::terminate()` is called.
         //
     template <std::invocable<task_context&> TransformFuncT, detail::reduction<std::invoke_result_t<TransformFuncT, task_context&>> ReduceOpT>
-    requires std::copy_constructible<TransformFuncT> && std::copy_constructible<ReduceOpT> && std::semiregular<std::invoke_result_t<TransformFuncT, task_context&>>
+    requires std::copy_constructible<TransformFuncT> && std::copy_constructible<ReduceOpT> && std::copyable<std::invoke_result_t<TransformFuncT, task_context&>>
     [[nodiscard]] std::invoke_result_t<TransformFuncT, task_context&>
     transform_reduce_first(TransformFuncT transformFunc, ReduceOpT reduceOp, int concurrency = -1) &&
     {
@@ -369,7 +369,7 @@ public:
         op.params.concurrency = concurrency;
         op.params.join_requested = true;
         do_run(op);
-        return std::move(data[0].value);
+        return std::move(data[0].value).value();
     }
 
         //
@@ -383,7 +383,7 @@ public:
         // `std::terminate()` is called.
         //
     template <std::invocable<task_context&> TransformFuncT, detail::reduction<std::invoke_result_t<TransformFuncT, task_context&>> ReduceOpT>
-    requires std::copy_constructible<TransformFuncT> && std::copy_constructible<ReduceOpT> && std::semiregular<std::invoke_result_t<TransformFuncT, task_context&>>
+    requires std::copy_constructible<TransformFuncT> && std::copy_constructible<ReduceOpT> && std::copyable<std::invoke_result_t<TransformFuncT, task_context&>>
     [[nodiscard]] std::invoke_result_t<TransformFuncT, task_context&>
     transform_reduce_first(TransformFuncT transformFunc, ReduceOpT reduceOp, int concurrency = -1) &
     {
@@ -400,7 +400,7 @@ public:
         auto op = detail::thread_squad_transform_reduce_operation<task_context, TransformFuncT, T, ReduceOpT>(std::move(transformFunc), std::move(reduceOp), data.get());
         op.params.concurrency = concurrency;
         do_run(op);
-        return std::move(data[0].value);
+        return std::move(data[0].value).value();
     }
 };
 
